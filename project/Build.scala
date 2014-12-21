@@ -8,8 +8,8 @@ object MainBuild extends Build {
   lazy val baseSettings =
     sbtrelease.ReleasePlugin.releaseSettings ++
     Sonatype.settings ++
-    net.virtualvoid.sbt.graph.Plugin.graphSettings ++
-    scoverage.ScoverageSbtPlugin.projectSettings
+    net.virtualvoid.sbt.graph.Plugin.graphSettings
+    //scoverage.ScoverageSbtPlugin.projectSettings
 
   lazy val buildSettings = baseSettings ++ Seq(
             organization := BuildSettings.organization,
