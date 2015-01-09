@@ -13,11 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.netflix.atlas.chart
+package com.netflix.atlas.core.util
 
 import java.io.InputStream
-
-import com.google.common.io.Resources
 import org.scalatest.FunSuite
 
 
@@ -42,7 +40,7 @@ class PngImageSuite extends FunSuite {
   """.stripMargin
 
   def getInputStream(file: String): InputStream = {
-    Resources.getResource("pngimage/" + file).openStream()
+    Streams.resource("pngimage/" + file)
   }
 
   def getImage(file: String): PngImage = {

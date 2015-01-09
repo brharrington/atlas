@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.netflix.atlas.webapi
+package com.netflix.atlas.test
 
 import java.awt.image.RenderedImage
 import java.io.File
@@ -21,9 +21,8 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
 
-import com.google.common.io.ByteStreams
-import com.google.common.io.Files
-import com.netflix.atlas.chart.PngImage
+import com.netflix.atlas.core.util.PngImage
+import com.netflix.atlas.core.util.Streams
 import org.scalatest.Assertions
 
 
@@ -41,8 +40,9 @@ class GraphAssertions(goldenDir: String, targetDir: String) extends Assertions {
   }
 
   private def getString(file: String): String = {
-    val in = getInputStream(file)
-    try new String(ByteStreams.toByteArray(in), "UTF-8") finally in.close()
+    Streams.scope(getInputStream(file)) { in =>
+      new String(Streams.byteArray(in), "UTF-8")
+    }
   }
 
   def generateReport(clazz: Class[_]) {
@@ -66,10 +66,12 @@ class GraphAssertions(goldenDir: String, targetDir: String) extends Assertions {
             Some(table)
           }
         }
-        } </body>
+      } </body>
     </html>
 
-    Files.write(report.toString.getBytes("UTF-8"), new File(s"$targetDir/report.html"))
+    Streams.scope(Streams.fileOut(new File(s"$targetDir/report.html"))) { out =>
+      out.write(report.toString.getBytes("UTF-8"))
+    }
   }
 
   def assertEquals(v1: Double, v2: Double, delta: Double) {
@@ -134,4 +136,3 @@ class GraphAssertions(goldenDir: String, targetDir: String) extends Assertions {
     try stream.write(s.getBytes("UTF-8")) finally stream.close()
   }
 }
-
