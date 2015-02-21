@@ -9,6 +9,9 @@ object BuildSettings {
     "-unchecked",
     "-Xexperimental",
     "-Xlint:_,-infer-any",
+    "-Ybackend:GenBCode",
+    "-Ydelambdafy:method",
+    "-Yopt:_",
     "-feature",
     "-target:jvm-1.8")
 
