@@ -28,7 +28,7 @@ class TimeSeriesExprSuite extends FunSuite {
 
   import com.netflix.atlas.core.model.TimeSeriesExprSuite._
 
-  val interpreter = Interpreter(StyleVocabulary.words ::: StandardVocabulary.words)
+  val interpreter = Interpreter(StyleVocabulary.allWords ::: StandardVocabulary.allWords)
   val data = constants
 
   val noTags = Map.empty[String, String]
@@ -49,6 +49,7 @@ class TimeSeriesExprSuite extends FunSuite {
     ":true,:avg,:count"           -> const(ts(constTag, "count(type=constant)", 1)),
     ":true,:sum,:avg"             -> const(ts(constTag, "(type=constant / count(type=constant))", 55)),
     ":true,:avg,:avg"             -> const(ts(constTag, "(sum(type=constant) / count(type=constant))", 5)),
+    ":false,:sum"                 -> const(ts(Map("name" -> "NO_DATA"), "NO DATA", Double.NaN)),
     "name,:has"                   -> const(ts(constTag, 55)),
     "name,1,:eq"                  -> const(ts(Map("name" -> "1", constTag), 1)),
     "name,1,:re"                  -> const(ts(constTag, 11)),
@@ -174,7 +175,7 @@ class TimeSeriesExprSuite extends FunSuite {
     test(s"eval global: $prg") {
       val c = interpreter.execute(prg)
       assert(c.stack.size === 1)
-      val expr = c.stack.collect { case Extractors.TimeSeriesType(t) => t } head
+      val expr = c.stack.collect { case ModelExtractors.TimeSeriesType(t) => t } head
       val rs = expr.eval(p.ctxt, p.input)
       assert(rs.expr === expr)
       assert(bounded(rs.data, p.ctxt) === bounded(p.output, p.ctxt))
@@ -184,7 +185,7 @@ class TimeSeriesExprSuite extends FunSuite {
       test(s"eval incremental $label: $prg") {
         val c = interpreter.execute(prg)
         assert(c.stack.size === 1)
-        val expr = c.stack.collect { case Extractors.TimeSeriesType(t) => t} head
+        val expr = c.stack.collect { case ModelExtractors.TimeSeriesType(t) => t} head
         val rs = expr.eval(p.ctxt, p.input)
         val ctxts = p.ctxt.partition(step, ChronoUnit.MINUTES)
         var state = Map.empty[StatefulExpr, Any]
@@ -212,7 +213,7 @@ class TimeSeriesExprSuite extends FunSuite {
     test(s"eval global: $prg") {
       val c = interpreter.execute(prg)
       assert(c.stack.size === 1)
-      val expr = c.stack.collect { case Extractors.TimeSeriesType(t) => t} head
+      val expr = c.stack.collect { case ModelExtractors.TimeSeriesType(t) => t} head
       val rs = expr.eval(p.ctxt, p.input)
       assert(rs.expr === expr)
       assert(bounded(rs.data, p.ctxt) === bounded(p.output, p.ctxt))

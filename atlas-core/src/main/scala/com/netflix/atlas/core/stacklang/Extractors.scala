@@ -15,17 +15,22 @@
  */
 package com.netflix.atlas.core.stacklang
 
-class ReverseRotSuite extends BaseWordSuite {
+import scala.util.Try
 
-  def interpreter: Interpreter = Interpreter(StandardVocabulary.allWords)
+object Extractors {
+  case object IntType {
+    def unapply(value: Any): Option[Int] = value match {
+      case v: String         => Try(v.toInt).toOption
+      case v: Int            => Some(v)
+      case _                 => None
+    }
+  }
 
-  def word: Word = StandardVocabulary.ReverseRot
-
-  def shouldMatch: List[(String, List[Any])] = List(
-    "a" -> List("a"),
-    "a,b" -> List("a", "b"),
-    "a,b,c,d,e" -> List("d", "c", "b", "a", "e")
-  )
-
-  def shouldNotMatch: List[String] = List("")
+  case object DoubleType {
+    def unapply(value: Any): Option[Double] = value match {
+      case v: String         => Try(v.toDouble).toOption
+      case v: Double         => Some(v)
+      case _                 => None
+    }
+  }
 }

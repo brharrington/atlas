@@ -26,7 +26,7 @@ import com.netflix.atlas.chart.GraphEngine
 import com.netflix.atlas.chart.VisionType
 import com.netflix.atlas.core.model.DataExpr
 import com.netflix.atlas.core.model.EvalContext
-import com.netflix.atlas.core.model.Extractors
+import com.netflix.atlas.core.model.ModelExtractors
 import com.netflix.atlas.core.model.StyleExpr
 import com.netflix.atlas.core.model.StyleVocabulary
 import com.netflix.atlas.core.model.TimeSeries
@@ -111,7 +111,7 @@ class GraphApi(implicit val actorRefFactory: ActorRefFactory) extends WebApi {
 
 object GraphApi {
 
-  private val interpreter = new Interpreter(StyleVocabulary.words ::: StandardVocabulary.words)
+  private val interpreter = new Interpreter(StyleVocabulary.allWords ::: StandardVocabulary.allWords)
 
   private val engines = ApiSettings.engines.map(e => e.name -> e).toMap
 
@@ -184,7 +184,7 @@ object GraphApi {
 
     def exprs: List[StyleExpr] = {
       interpreter.execute(query).stack.reverse.flatMap {
-        case Extractors.PresentationType(s) => s.perOffset
+        case ModelExtractors.PresentationType(s) => s.perOffset
       }
     }
 

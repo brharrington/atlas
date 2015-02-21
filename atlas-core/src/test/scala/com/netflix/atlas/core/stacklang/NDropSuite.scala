@@ -13,25 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.netflix.atlas.core.model
+package com.netflix.atlas.core.stacklang
 
-import com.netflix.atlas.core.stacklang.BaseWordSuite
-import com.netflix.atlas.core.stacklang.Interpreter
-import com.netflix.atlas.core.stacklang.StandardVocabulary
-import com.netflix.atlas.core.stacklang.Word
+class NDropSuite extends BaseWordSuite {
 
-class NotWordSuite extends BaseWordSuite {
+  def interpreter: Interpreter = Interpreter(StandardVocabulary.allWords)
 
-  def interpreter: Interpreter = Interpreter(
-    QueryVocabulary.allWords ::: StandardVocabulary.allWords)
-
-  def word: Word = QueryVocabulary.Not
+  def word: Word = StandardVocabulary.NDrop
 
   def shouldMatch: List[(String, List[Any])] = List(
-    ":true" -> List(Query.False),
-    ":false" -> List(Query.True),
-    "a,b,:eq" -> List(Query.Not(Query.Equal("a", "b")))
+    "a,0" -> List("a"),
+    "a,b,1" -> List("a"),
+    "a,b,2" -> Nil
   )
 
-  def shouldNotMatch: List[String] = List("", "a")
+  def shouldNotMatch: List[String] = List("", "a", "a,b")
 }

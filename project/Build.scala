@@ -1,7 +1,6 @@
 import sbt._
 import sbt.Keys._
 import com.typesafe.sbt.pgp.PgpKeys._
-import com.github.retronym.SbtOneJar._
 
 object MainBuild extends Build {
 
@@ -19,8 +18,7 @@ object MainBuild extends Build {
            sourcesInBase := false,
             fork in Test := true,   // Needed to avoid ClassNotFoundException with equalsverifier
               exportJars := true,   // Needed for one-jar, with multi-project
-               resolvers += Resolver.sonatypeRepo("snapshots"),
-               resolvers += "rrd4j" at "https://raw.githubusercontent.com/brharrington/rrd4j/repo",
+       externalResolvers := BuildSettings.resolvers,
      checkLicenseHeaders := License.checkLicenseHeaders(streams.value.log, sourceDirectory.value),
     formatLicenseHeaders := License.formatLicenseHeaders(streams.value.log, sourceDirectory.value)
   )
@@ -111,8 +109,6 @@ object MainBuild extends Build {
   lazy val `atlas-standalone` = project
     .dependsOn(`atlas-webapi`)
     .settings(buildSettings: _*)
-    .settings(oneJarSettings: _*)
-    .settings(mainClass in oneJar := Some("com.netflix.atlas.standalone.Main"))
     .settings(libraryDependencies ++= Seq(
       Dependencies.iepGovernator,
       Dependencies.log4jApi,
@@ -142,8 +138,6 @@ object MainBuild extends Build {
   lazy val `atlas-wiki` = project
     .dependsOn(`atlas-core`, `atlas-webapi`)
     .settings(buildSettings: _*)
-    .settings(oneJarSettings: _*)
-    .settings(mainClass in oneJar := Some("com.netflix.atlas.wiki.Main"))
     .settings(libraryDependencies ++= Seq(
       Dependencies.scalaCompiler
     ))

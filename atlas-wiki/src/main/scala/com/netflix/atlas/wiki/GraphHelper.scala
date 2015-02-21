@@ -30,34 +30,58 @@ import spray.http.HttpRequest
 import spray.http.HttpResponse
 import spray.http.Uri
 
+import scala.concurrent.Await
 import scala.util.Failure
 import scala.util.Success
 
-class GraphHelper(webApi: ActorRef, dir: File) extends StrictLogging {
+class GraphHelper(webApi: ActorRef, dir: File, path: String) extends StrictLogging {
 
   import scala.concurrent.ExecutionContext.Implicits.global
+  import scala.concurrent.duration._
 
   implicit val timeout = akka.util.Timeout(1, TimeUnit.MINUTES)
+  private val askRef = akka.pattern.ask(webApi)
 
-  private val baseUri = "https://raw.githubusercontent.com/wiki/Netflix/atlas/gen-images"
+  private val baseUri = s"https://raw.githubusercontent.com/wiki/Netflix/atlas/$path"
+
+  private val wordLinkBaseUri = "https://github.com/Netflix/atlas/wiki/Stack-Language-Reference"
 
   def image(uri: String, showQuery: Boolean = true): String = {
     logger.info(s"creating image for: $uri")
     val fname = imageFileName(uri)
     val req = HttpRequest(HttpMethods.GET, Uri(uri))
-    akka.pattern.ask(webApi, req).onComplete {
-      case Success(res: HttpResponse) =>
+    val future = askRef.ask(req)
+    Await.result(future, 1.minute) match {
+      case res: HttpResponse =>
         dir.mkdirs()
         val image = PngImage(res.entity.data.toByteArray)
         scope(fileOut(new File(dir, fname))) { out => image.write(out) }
-      case Success(v) => throw new IllegalStateException(s"unexpected response: $v")
-      case Failure(t) => throw t
+      case v => throw new IllegalStateException(s"unexpected response: $v")
     }
 
     if (showQuery)
       s"${formatQuery(uri)}\n![$fname]($baseUri/$fname)\n"
     else
       s"![$fname]($baseUri/$fname)\n"
+  }
+
+  def imageHtml(uri: String): String = {
+    logger.info(s"creating image for: $uri")
+    val fname = imageFileName(uri)
+    val file = new File(dir, fname)
+    if (!file.exists()) {
+      val req = HttpRequest(HttpMethods.GET, Uri(uri))
+      val future = askRef.ask(req)
+      Await.result(future, 1.minute) match {
+        case res: HttpResponse =>
+          dir.mkdirs()
+          val image = PngImage(res.entity.data.toByteArray)
+          scope(fileOut(file)) { out => image.write(out) }
+        case v => throw new IllegalStateException(s"unexpected response: $v")
+      }
+    }
+
+    s"""<img src="$baseUri/$fname"/>"""
   }
 
   private def imageFileName(uri: String): String = {
@@ -70,7 +94,11 @@ class GraphHelper(webApi: ActorRef, dir: File) extends StrictLogging {
     val pstr = params.toList.sortWith(_._1 < _._1).flatMap { case (k, vs) =>
       vs.map { v => if (k == "q") formatQueryExpr(v) else s"$k=$v" }
     }
-    s"```\n${uri.getPath}?\n  ${pstr.mkString("\n  &")}\n```\n"
+    s"<pre>\n${uri.getPath}?\n  ${pstr.mkString("\n  &")}\n</pre>\n"
+  }
+
+  private def mkLink(name: String): String = {
+    s"""<a href="$wordLinkBaseUri#$name">:$name</a>"""
   }
 
   private def formatQueryExpr(q: String): String = {
@@ -79,7 +107,7 @@ class GraphHelper(webApi: ActorRef, dir: File) extends StrictLogging {
     buf.append("q=\n    ")
     parts.foreach { p =>
       if (p.startsWith(":"))
-        buf.append(p).append(',').append("\n    ")
+        buf.append(mkLink(p.substring(1))).append(',').append("\n    ")
       else
         buf.append(p).append(',')
     }
