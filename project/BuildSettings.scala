@@ -17,6 +17,7 @@ object BuildSettings {
     Resolver.jcenterRepo,
     DefaultMavenRepository,
     "jfrog" at "http://oss.jfrog.org/oss-snapshot-local",
+    Resolver.sonatypeRepo("snapshots"), // for 2.11.6-SNAPSHOT, remove for release
     "rrd4j" at "https://raw.githubusercontent.com/brharrington/rrd4j/repo")
 
   // Don't create root.jar, from:
