@@ -19,6 +19,7 @@ import java.time.Duration
 
 import com.netflix.atlas.core.model.ConsolidationFunction.SumOrAvgCf
 import com.netflix.atlas.core.util.Math
+import com.netflix.atlas.core.util.SmallHashMap
 import com.netflix.atlas.core.util.Strings
 
 sealed trait DataExpr extends TimeSeriesExpr {
@@ -46,6 +47,12 @@ sealed trait DataExpr extends TimeSeriesExpr {
     }
   }
 
+  protected def commonTags(tags: Map[String, String]): Map[String, String] = {
+    val keys = Query.exactKeys(query)
+    val result = tags.filter(t => keys.contains(t._1))
+    if (result.isEmpty) DataExpr.unknown else result
+  }
+
   def eval(context: EvalContext, data: Map[DataExpr, List[TimeSeries]]): ResultSet = {
     ResultSet(this, data.getOrElse(this, Nil), context.state)
   }
@@ -56,6 +63,8 @@ sealed trait DataExpr extends TimeSeriesExpr {
 }
 
 object DataExpr {
+
+  private val unknown = SmallHashMap("name" -> "unknown")
 
   private def defaultLabel(expr: DataExpr, ts: TimeSeries): String = {
     val label = expr match {
@@ -91,7 +100,8 @@ object DataExpr {
     override def eval(context: EvalContext, data: List[TimeSeries]): ResultSet = {
       val filtered = data.filter(t => query.matches(t.tags))
       val aggr = if (filtered.isEmpty) TimeSeries.noData(context.step) else {
-        TimeSeries.aggregate(filtered.iterator, context.start, context.end, this)
+        val tags = commonTags(filtered.head.tags)
+        TimeSeries.aggregate(filtered.iterator, context.start, context.end, this).withTags(tags)
       }
       val rs = consolidate(context.step, List(aggr))
       ResultSet(this, rs, context.state)
