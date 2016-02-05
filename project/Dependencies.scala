@@ -10,6 +10,7 @@ object Dependencies {
     val log4j      = "2.5"
     val scala      = "2.11.7"
     val slf4j      = "1.7.14"
+    val spark      = "1.6.0"
     val spectator  = "0.35.1"
     val spray      = "1.3.3"
   }
@@ -51,6 +52,8 @@ object Dependencies {
   val slf4jApi        = "org.slf4j" % "slf4j-api" % slf4j
   val slf4jLog4j      = "org.slf4j" % "slf4j-log4j12" % slf4j
   val slf4jSimple     = "org.slf4j" % "slf4j-simple" % slf4j
+  val sparkCore       = "org.apache.spark" % "spark-core_2.11" % spark
+  val sparkSql        = "org.apache.spark" % "spark-sql_2.11" % spark
   val spectatorApi    = "com.netflix.spectator" % "spectator-api" % spectator
   val spectatorLog4j  = "com.netflix.spectator" % "spectator-ext-log4j2" % spectator
   val spectatorM2     = "com.netflix.spectator" % "spectator-reg-metrics2" % spectator

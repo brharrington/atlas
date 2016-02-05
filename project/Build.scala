@@ -31,6 +31,7 @@ object MainBuild extends Build {
       `atlas-core`,
       `atlas-jmh`,
       `atlas-json`,
+      `atlas-sql`,
       `atlas-standalone`,
       `atlas-test`,
       `atlas-webapi`,
@@ -101,6 +102,15 @@ object MainBuild extends Build {
       Dependencies.jacksonScala2,
       Dependencies.jacksonSmile2,
       Dependencies.jodaConvert
+    ))
+
+  lazy val `atlas-sql` = project
+    .dependsOn(`atlas-core`)
+    .settings(buildSettings: _*)
+    .settings(libraryDependencies ++= commonDeps)
+    .settings(libraryDependencies ++= Seq(
+      Dependencies.sparkCore % "test",
+      Dependencies.sparkSql % "test"
     ))
 
   lazy val `atlas-standalone` = project
