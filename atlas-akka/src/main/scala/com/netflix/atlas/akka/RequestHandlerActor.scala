@@ -49,11 +49,11 @@ class RequestHandlerActor(registry: Registry, config: Config)
         // Used for CORS pre-flight checks
         complete(StatusCodes.OK)
       }
-      val healthcheck = path("healthcheck") {
+      val ok = path("ok") {
         // Default endpoint for testing that always returns 200
         complete(StatusCodes.OK)
       }
-      val finalRoutes = corsPreflight ~ healthcheck ~ routes
+      val finalRoutes = corsPreflight ~ ok ~ routes
 
       // Allow all endpoints to be access cross-origin
       val cors = corsFilter { finalRoutes }
