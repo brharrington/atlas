@@ -27,6 +27,8 @@ class TestApi(val actorRefFactory: ActorRefFactory) extends WebApi {
   import CustomDirectives._
   import spray.http.StatusCodes._
 
+  println(actorRefFactory)
+
   def routes: RequestContext => Unit = {
     path("jsonparse") {
       post { ctx =>
