@@ -1,1 +1,2 @@
 {"name": "b", "nf_app": "", "nf_cluster": "", "nf_asg": "", "nf_ami": "", "nf_region": "", "nf_zone": "", "nf_node": "", "tags": {}, "dateint": 20160202, "hour": 5, "values": [1.0, 2.0]}
+{"name": "b", "nf_app": "", "nf_cluster": "", "nf_asg": "", "nf_ami": "", "nf_region": "", "nf_zone": "", "nf_node": "", "tags": {}, "dateint": 20160202, "hour": 5, "values": ["NaN", 2.0]}

@@ -48,6 +48,19 @@ class RewriteSuite extends FunSuite with BeforeAndAfterAll {
     }
   }
 
+  test("filter nan") {
+    val results = context.sql(
+      """
+        |select name, v
+        |from (
+        |  select name, explode(values) as v from atlas) foo
+        |where cast(v as string) != 'NaN'
+      """.stripMargin)
+    results.foreach { row =>
+      println(row)
+    }
+  }
+
   test("aggr2") {
     val results = context.sql("select name, i, v from atlas LATERAL view posexplode(values) t AS i, v")
     results.foreach { row =>
