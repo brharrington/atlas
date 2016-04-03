@@ -28,7 +28,7 @@ class TimeSeriesExprSuite extends FunSuite {
 
   import com.netflix.atlas.core.model.TimeSeriesExprSuite._
 
-  val interpreter = Interpreter(StyleVocabulary.allWords ::: StandardVocabulary.allWords)
+  val interpreter = Interpreter(StyleVocabulary.allWords)
   val data = constants
 
   val noTags = Map.empty[String, String]
@@ -121,6 +121,7 @@ class TimeSeriesExprSuite extends FunSuite {
     ":true,(,name,),:by,4,:head"  -> const(byName.sortWith(_.label < _.label).take(4)),
     ":true,(,name,),:by,50,:head" -> const(byName),
     ":false,(,name,),:by"         -> const(Nil),
+    "n,:has,(,n,),:by,4,:div,:sum" -> const(Nil),
     "NaN,NaN,:add"                -> const(ts(Map("name" -> "NaN"), "(NaN + NaN)", Double.NaN)),
     "NaN,1.0,:add"                -> const(ts(Map("name" -> "NaN"), "(NaN + 1.0)", 1.0)),
     "1.0,NaN,:add"                -> const(ts(Map("name" -> "1.0"), "(1.0 + NaN)", 1.0)),
@@ -198,6 +199,7 @@ class TimeSeriesExprSuite extends FunSuite {
     ":true,(,name,),:by,:stat-max,50,:gt,:filter"    -> const(Nil),
     ":true,(,name,),:by,:stat-min,:over,:lt,:filter" -> const(Nil),
     ":true,(,name,),:by,:stat-avg,1,:lt,:filter"     -> const(ts(Map("name" -> "0"), "(name=0)", 0)),
+    "name,1,:eq,foo,:legend,1,:filter"               -> const(ts(Map("name" -> "1"), "name=1", 1.0)),
     "1,:stat-min-mf"                                 -> const(ts(Map("name" -> "1.0"), "stat-min(1.0)", 1.0)),
     "1,:stat-max-mf"                                 -> const(ts(Map("name" -> "1.0"), "stat-max(1.0)", 1.0)),
     "1,:stat-avg-mf"                                 -> const(ts(Map("name" -> "1.0"), "stat-avg(1.0)", 1.0)),
@@ -249,9 +251,9 @@ class TimeSeriesExprSuite extends FunSuite {
     test(s"eval global: $prg") {
       val c = interpreter.execute(prg)
       assert(c.stack.size === 1)
-      val expr = c.stack.collect { case ModelExtractors.TimeSeriesType(t) => t} head
-      val rs = expr.eval(p.ctxt, p.input)
-      assert(rs.expr === expr)
+      val expr = c.stack.collect { case ModelExtractors.PresentationType(t) => t} head
+      val rs = expr.expr.eval(p.ctxt, p.input)
+      assert(rs.expr === expr.expr)
       assert(bounded(rs.data, p.ctxt) === bounded(p.output, p.ctxt))
     }
   }

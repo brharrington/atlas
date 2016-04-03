@@ -35,6 +35,7 @@ import com.netflix.atlas.core.util.PngImage
 import com.netflix.atlas.core.util.Streams
 import com.netflix.atlas.json.Json
 import com.netflix.atlas.test.GraphAssertions
+import com.netflix.atlas.test.SrcPath
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
@@ -44,7 +45,7 @@ abstract class PngGraphEngineSuite extends FunSuite with BeforeAndAfterAll {
   private val dataDir   = s"graphengine/data"
 
   // SBT working directory gets updated with fork to be the dir for the project
-  private val baseDir = "."
+  private val baseDir = SrcPath.forProject("atlas-chart")
   private val goldenDir = s"$baseDir/src/test/resources/graphengine/${getClass.getSimpleName}"
   private val targetDir = s"$baseDir/target/${getClass.getSimpleName}"
   private val graphAssertions = new GraphAssertions(goldenDir, targetDir)
@@ -248,7 +249,7 @@ abstract class PngGraphEngineSuite extends FunSuite with BeforeAndAfterAll {
   singleLine("single_line_logarithmic",    v => v.adjustPlots(_.copy(scale = Scale.LOGARITHMIC)))
   singleLine("single_line_zoom_2.0",       v => v.copy(zoom = 2.0))
   singleLine("single_line_zoom_4.0",       v => v.copy(zoom = 4.0))
-  singleLine("single_line_no_tick_labels", v => v.adjustPlots(_.copy(showTickLabels = false)))
+  singleLine("single_line_no_tick_labels", v => v.adjustPlots(_.copy(tickLabelMode = TickLabelMode.OFF)))
 
   singleLine("single_line_layout_image",   v => v.copy(layout = Layout.IMAGE))
   singleLine("single_line_layout_ih",      v => v.copy(layout = Layout.IMAGE_HEIGHT))
@@ -470,6 +471,7 @@ abstract class PngGraphEngineSuite extends FunSuite with BeforeAndAfterAll {
   multiy("ylabel_wrap", v => v.copy(ylabel = Some(longLabel)))
   multiy("color",       v => v.copy(axisColor = Some(Color.LIGHT_GRAY)))
   multiy("logarithmic", v => v.copy(scale = Scale.LOGARITHMIC))
+  multiy("binary",      v => v.copy(tickLabelMode = TickLabelMode.BINARY))
 
   // https://github.com/Netflix/atlas/issues/119
   // TODO: fix to show label

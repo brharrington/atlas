@@ -42,7 +42,7 @@ object Json {
     def decode(input: InputStream): T = decode(factory.createParser(input))
     def decode(input: Reader): T = decode(factory.createParser(input))
 
-    private def decode(parser: JsonParser): T = {
+    def decode(parser: JsonParser): T = {
       try {
         val value = reader.readValue[T](parser)
         require(parser.nextToken() == null, "invalid json, additional content after value")
@@ -92,6 +92,17 @@ object Json {
 
       def getOwnerType = null
     }
+  }
+
+  /**
+    * Register additional modules with the default mappers used for JSON and Smile.
+    *
+    * @param module
+    *     Jackson databind module to register.
+    */
+  def registerModule(module: Module): Unit = {
+    jsonMapper.registerModule(module)
+    smileMapper.registerModule(module)
   }
 
   def newMapper: ObjectMapper = newMapper(jsonFactory)

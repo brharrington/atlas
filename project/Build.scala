@@ -15,7 +15,6 @@ object MainBuild extends Build {
            scalacOptions ++= BuildSettings.compilerFlags,
               crossPaths := false,
            sourcesInBase := false,
-            fork in Test := true,   // Needed to avoid ClassNotFoundException with equalsverifier
               exportJars := true,   // Needed for one-jar, with multi-project
        externalResolvers := BuildSettings.resolvers,
      checkLicenseHeaders := License.checkLicenseHeaders(streams.value.log, sourceDirectory.value),
@@ -116,6 +115,7 @@ object MainBuild extends Build {
   lazy val `atlas-standalone` = project
     .dependsOn(`atlas-webapi`)
     .settings(buildSettings: _*)
+    .settings(libraryDependencies ++= commonDeps)
     .settings(libraryDependencies ++= Seq(
       Dependencies.iepGovernator,
       Dependencies.guiceCore,

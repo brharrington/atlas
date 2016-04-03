@@ -1,5 +1,3 @@
-###[Home](Home) > [[Examples]]
-
 * [[Basics]]
 * [[Legends]]
 * [[Graph Layout]]
@@ -9,6 +7,7 @@
 * [Color Blindness](Vision)
 * [[Axis Bounds]]
 * [[Axis Scale]]
+* [[Tick Labels]]
 * [[Multi Y]]
 * [[Time Zone]]
 * [[Time Shift]]

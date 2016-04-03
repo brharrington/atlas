@@ -57,6 +57,8 @@ class ApiSettings(root: => Config) {
 
   def palette: String = config.getString("graph.palette")
 
+  def metadataEnabled: Boolean = config.getBoolean("graph.png-metadata-enabled")
+
   def maxDatapoints: Int = config.getInt("graph.max-datapoints")
 
   def engines: List[GraphEngine] = {
@@ -77,4 +79,9 @@ class ApiSettings(root: => Config) {
   def maxDatapointAge: Long = config.getDuration("publish.max-age", TimeUnit.MILLISECONDS)
 
   def validationRules: List[Rule] = Rule.load(config.getConfigList("publish.rules"))
+
+  def excludedWords: Set[String] = {
+    import scala.collection.JavaConversions._
+    config.getStringList("expr.complete.excluded-words").toSet
+  }
 }

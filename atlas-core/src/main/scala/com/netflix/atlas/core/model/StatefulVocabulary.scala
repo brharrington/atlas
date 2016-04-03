@@ -112,7 +112,8 @@ object StatefulVocabulary extends Vocabulary {
 
     override def summary: String =
       """
-        |[Double exponential smoothing](DES).
+        |[Double exponential smoothing](DES). For most use-cases [sliding DES](stateful-sdes)
+        |should be used instead to ensure a deterministic prediction.
       """.stripMargin.trim
 
     override def signature: String =
@@ -197,7 +198,27 @@ object StatefulVocabulary extends Vocabulary {
 
     override def summary: String =
       """
-        |Moving average.
+        |Computes a moving average over the input window. Until there is at least one sample
+        |for the whole window it will emit `NaN`. If the input line has `NaN` values, then they
+        |will be treated as zeros. Example:
+        |
+        || Input | 2m,:trend | 5m,:trend |
+        ||-------|-----------|-----------|
+        ||   0   |  NaN      | NaN       |
+        ||   1   |  0.5      | NaN       |
+        ||  -1   |  0.0      | NaN       |
+        || NaN   | -0.5      | NaN       |
+        ||   0   |  0.0      | 0.0       |
+        ||   1   |  0.5      | 0.2       |
+        ||   2   |  1.5      | 0.4       |
+        ||   1   |  1.5      | 0.8       |
+        ||   1   |  1.0      | 1.0       |
+        ||   0   |  0.5      | 1.0       |
+        |
+        |The window size is specified as a range of time. If the window size is not evenly
+        |divisible by the [step size](Concepts#step-size), then the window size will be rounded
+        |down. So a 5m window with a 2m step would result in a 4m window with two datapoints
+        |per average. A step size larger than the window will result in the trend being a no-op.
       """.stripMargin.trim
 
     override def signature: String =
@@ -219,7 +240,29 @@ object StatefulVocabulary extends Vocabulary {
 
     override def summary: String =
       """
-        |Sum the values across the evaluation context.
+        |Sum the values across the evaluation context. This is typically used to approximate the
+        |distinct number of events that occurred. If the input is non-negative, then each datapoint
+        |for the output line will represent the area under the input line from the start of the
+        |graph to the time for that datapoint. Missing values, `NaN`, will be treated as zeroes.
+        |For example:
+        |
+        || Input | :integral |
+        ||-------|-----------|
+        || 0     | 0         |
+        || 1     | 1         |
+        || -1    | 0         |
+        || NaN   | 0         |
+        || 0     | 0         |
+        || 1     | 1         |
+        || 2     | 3         |
+        || 1     | 4         |
+        || 1     | 5         |
+        || 0     | 5         |
+        |
+        |For a [counter](https://github.com/Netflix/spectator/wiki/Counter-Usage), each data point
+        |represents the average rate per second over the step interval. To compute the total
+        |amount incremented, the value first needs to be converted to a rate per step interval.
+        |This conversion can be performed using the [:per-step](math-per‐step) operation.
       """.stripMargin.trim
 
     override def signature: String =
@@ -243,8 +286,8 @@ object StatefulVocabulary extends Vocabulary {
 
     override def summary: String =
       """
-        |Opposite of [:integral](#integral). Computes the rate of change per step of the input
-        |time series.
+        |Opposite of [:integral](stateful-integral). Computes the rate of change per step of the
+        |input time series.
       """.stripMargin.trim
 
     override def signature: String =
