@@ -92,6 +92,10 @@ object Query {
     def couldMatch(tags: Map[String, String]): Boolean = tags.get(k).fold(true)(check)
   }
 
+  sealed trait ScalarKeyValueQuery extends KeyValueQuery {
+    def v: String
+  }
+
   case class HasKey(k: String) extends KeyQuery {
     def matches(tags: Map[String, String]): Boolean = tags.contains(k)
     def matchesAny(tags: Map[String, List[String]]): Boolean = tags.contains(k)
@@ -100,37 +104,37 @@ object Query {
     override def toString: String = s"$k,:has"
   }
 
-  case class Equal(k: String, v: String) extends KeyValueQuery {
+  case class Equal(k: String, v: String) extends ScalarKeyValueQuery {
     def check(s: String): Boolean = s == v
     def labelString: String = s"$k=$v"
     override def toString: String = s"$k,$v,:eq"
   }
 
-  case class LessThan(k: String, v: String) extends KeyValueQuery {
+  case class LessThan(k: String, v: String) extends ScalarKeyValueQuery {
     def check(s: String): Boolean = s < v
     def labelString: String = s"$k<$v"
     override def toString: String = s"$k,$v,:lt"
   }
 
-  case class LessThanEqual(k: String, v: String) extends KeyValueQuery {
+  case class LessThanEqual(k: String, v: String) extends ScalarKeyValueQuery {
     def check(s: String): Boolean = s <= v
     def labelString: String = s"$k<=$v"
     override def toString: String = s"$k,$v,:le"
   }
 
-  case class GreaterThan(k: String, v: String) extends KeyValueQuery {
+  case class GreaterThan(k: String, v: String) extends ScalarKeyValueQuery {
     def check(s: String): Boolean = s > v
     def labelString: String = s"$k>$v"
     override def toString: String = s"$k,$v,:gt"
   }
 
-  case class GreaterThanEqual(k: String, v: String) extends KeyValueQuery {
+  case class GreaterThanEqual(k: String, v: String) extends ScalarKeyValueQuery {
     def check(s: String): Boolean = s >= v
     def labelString: String = s"$k>=$v"
     override def toString: String = s"$k,$v,:ge"
   }
 
-  sealed trait PatternQuery extends KeyValueQuery {
+  sealed trait PatternQuery extends ScalarKeyValueQuery {
     def pattern: StringMatcher
   }
 
