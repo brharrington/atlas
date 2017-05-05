@@ -23,7 +23,6 @@ import com.netflix.atlas.core.model.Query
 import com.netflix.atlas.core.model.Tag
 import com.netflix.atlas.core.model.TagKey
 import com.netflix.atlas.core.model.TaggedItem
-import com.netflix.atlas.core.util.IntIntHashMap
 import com.netflix.atlas.core.util.Interner
 import com.netflix.atlas.core.util.NoopInterner
 import com.netflix.atlas.core.util.RefIntHashMap
@@ -33,6 +32,11 @@ import org.slf4j.LoggerFactory
 
 object RoaringTagIndex {
   private val logger = LoggerFactory.getLogger(getClass)
+
+  private val Items = 0
+  private val Keys = 1
+  private val Values = 2
+  private val Tags = 3
 
   def empty[T <: TaggedItem: Manifest]: RoaringTagIndex[T] = {
     new RoaringTagIndex(new Array[T](0))
@@ -62,7 +66,7 @@ class RoaringTagIndex[T <: TaggedItem](
 
   import com.netflix.atlas.core.index.RoaringTagIndex._
 
-  type RoaringValueMap = util.IdentityHashMap[String, RoaringBitmap]
+  type RoaringValueMap = util.IdentityHashMap[String, Array[RoaringBitmap]]
   type RoaringKeyMap = util.IdentityHashMap[String, RoaringValueMap]
 
   // Interner to use for building the index
@@ -73,11 +77,36 @@ class RoaringTagIndex[T <: TaggedItem](
     def compare(t1: T, t2: T): Int = t1.id compareTo t2.id
   }
 
+  private val (keys, values, tags) = {
+    val keySet = new util.TreeSet[String]()
+    val valueSet = new util.TreeSet[String]()
+    val tagSet = new util.TreeSet[Tag]()
+    var pos = 0
+    while (pos < items.length) {
+      items(pos).foreach { (k, v) =>
+        keySet.add(k.intern())
+        valueSet.add(v.intern())
+        tagSet.add(Tag(k.intern(), v.intern()))
+      }
+      pos += 1
+    }
+    val ks = keySet.toArray(new Array[String](keySet.size()))
+    val vs = valueSet.toArray(new Array[String](valueSet.size()))
+    val ts = tagSet.toArray(new Array[Tag](tagSet.size()))
+    (ks, vs, ts)
+  }
+
   // Precomputed set of all items
   private val all = {
-    val set = new RoaringBitmap()
-    set.add(0L, items.length)
-    set
+    val itemSet = new RoaringBitmap()
+    itemSet.add(0L, items.length)
+    val keySet = new RoaringBitmap()
+    keySet.add(0L, keys.length)
+    val valueSet = new RoaringBitmap()
+    valueSet.add(0L, values.length)
+    val tagSet = new RoaringBitmap()
+    tagSet.add(0L, tags.length)
+    Array(itemSet, keySet, valueSet, tagSet)
   }
 
   // Primary indexes to search for a tagged item:
@@ -86,10 +115,11 @@ class RoaringTagIndex[T <: TaggedItem](
   // * keyIndex: key -> set, precomputed union of all sets for a given key
   private val (itemIds, itemIndex, keyIndex) = buildItemIndex()
 
-  // Indexes to search for matching tags
-  // * tagsIndex: sorted array of all unique tags and overall counts
-  // * itemTags: itemTags(i) has an array of indexes into tags array for items(i)
-  private val (tagIndex, itemTags) = buildTagIndex()
+  private def newBitmaps(): Array[RoaringBitmap] = {
+    val bitmaps = new Array[RoaringBitmap](4)
+    bitmaps.indices.foreach { i => bitmaps(i) = new RoaringBitmap() }
+    bitmaps
+  }
 
   private def buildItemIndex(): (Array[BigInteger], RoaringKeyMap, RoaringValueMap) = {
     // Sort items array based on the id, allows for efficient paging of requests using the id
@@ -98,6 +128,21 @@ class RoaringTagIndex[T <: TaggedItem](
     util.Arrays.sort(items, idComparator)
     val itemIds = new Array[BigInteger](items.length)
 
+    val keyPositions = new RefIntHashMap[String](2 * keys.length)
+    keys.indices.foreach { i =>
+      keyPositions.put(keys(i), i)
+    }
+
+    val valuePositions = new RefIntHashMap[String](2 * values.length)
+    values.indices.foreach { i =>
+      valuePositions.put(values(i), i)
+    }
+
+    val tagPositions = new RefIntHashMap[Tag](2 * tags.length)
+    tags.indices.foreach { i =>
+      tagPositions.put(tags(i), i)
+    }
+
     // Build the main index
     logger.debug(s"building index with ${items.length} items, create main key map")
     val kidx = new RoaringValueMap
@@ -105,6 +150,12 @@ class RoaringTagIndex[T <: TaggedItem](
     var pos = 0
     while (pos < items.length) {
       itemIds(pos) = items(pos).id
+      val itemTags = new Array[Tag](items(pos).tags.size)
+      var i = 0
+      items(pos).foreach { (k, v) =>
+        itemTags(i) = Tag(k.intern(), v.intern())
+        i += 1
+      }
       items(pos).foreach { (k, v) =>
         val internedK = buildInterner.intern(k)
         var vidx = idx.get(internedK)
@@ -117,18 +168,28 @@ class RoaringTagIndex[T <: TaggedItem](
         val internedV = buildInterner.intern(v)
         var matchSet = vidx.get(internedV)
         if (matchSet == null) {
-          matchSet = new RoaringBitmap()
+          matchSet = newBitmaps()
           vidx.put(internedV, matchSet)
         }
-        matchSet.add(pos)
+        matchSet(Items).add(pos)
+        itemTags.foreach { t =>
+          matchSet(Keys).add(keyPositions.get(t.key, -1))
+          matchSet(Values).add(valuePositions.get(t.value, -1))
+          matchSet(Tags).add(tagPositions.get(t, -1))
+        }
 
         // Add to key index
         matchSet = kidx.get(internedK)
         if (matchSet == null) {
-          matchSet = new RoaringBitmap()
+          matchSet = newBitmaps()
           kidx.put(internedK, matchSet)
         }
-        matchSet.add(pos)
+        matchSet(Items).add(pos)
+        matchSet(Keys).add(keyPositions.get(internedK, -1))
+        matchSet(Values).add(valuePositions.get(internedV, -1))
+        itemTags.foreach { t =>
+          matchSet(Tags).add(tagPositions.get(t, -1))
+        }
       }
       pos += 1
     }
@@ -136,80 +197,26 @@ class RoaringTagIndex[T <: TaggedItem](
     (itemIds, idx, kidx)
   }
 
-  private def buildTagIndex(): (Array[Tag], Array[Array[Int]]) = {
-    // Count how many times each tag occurs
-    logger.debug(s"building tag index with ${items.length} items, compute tag counts")
-    val tagCounts = new scala.collection.mutable.AnyRefMap[String, RefIntHashMap[String]]
-    var pos = 0
-    while (pos < items.length) {
-      items(pos).foreach { (k, v) =>
-        tagCounts.getOrElseUpdate(k, new RefIntHashMap[String]()).increment(v, 1)
-      }
-      pos += 1
-    }
-
-    // Create sorted array with tags and the overall counts
-    logger.debug(s"building tag index with ${items.length} items, sort and overall counts")
-    val tagsSize = tagCounts.map(_._2.size).sum
-    val tagsArray = new Array[Tag](tagsSize)
-    pos = 0
-    tagCounts.foreach { case (k, vc) =>
-      vc.foreach { (v, c) =>
-        tagsArray(pos) = Tag(buildInterner.intern(k), buildInterner.intern(v), c)
-        pos += 1
-      }
-    }
-    util.Arrays.sort(tagsArray.asInstanceOf[Array[AnyRef]])
-
-    // Create map of tag to position in tags array
-    logger.debug(s"building tag index with ${items.length} items, tag to position map")
-    val posMap = new scala.collection.mutable.AnyRefMap[String, RefIntHashMap[String]]
-    pos = 0
-    while (pos < tagsArray.length) {
-      val t = tagsArray(pos)
-      posMap.getOrElseUpdate(t.key, new RefIntHashMap[String]()).put(t.value, pos)
-      pos += 1
-    }
-
-    // Build array of the tags for a given item
-    logger.debug(s"building tag index with ${items.length} items, create item to tag ints map")
-    val itemTags = new Array[Array[Int]](items.length)
-    pos = 0
-    while (pos < items.length) {
-      val tags = items(pos).tags
-      val tagsArray = new Array[Int](tags.size)
-      var i = 0
-      items(pos).foreach { (k, v) =>
-        tagsArray(i) = posMap(k).get(v, -1)
-        i += 1
-      }
-      itemTags(pos) = tagsArray
-      pos += 1
-    }
-
-    (tagsArray, itemTags)
-  }
-
-  private[index] def findImpl(query: Query, offset: Int): RoaringBitmap = {
+  private[index] def findImpl(idx: Int, query: Query, offset: Int): RoaringBitmap = {
     import com.netflix.atlas.core.model.Query._
     query match {
-      case And(q1, q2)            => and(q1, q2, offset)
-      case Or(q1, q2)             => or(q1, q2, offset)
-      case Not(q)                 => diff(all, findImpl(q, offset))
-      case Equal(k, v)            => equal(k, v, offset)
-      case GreaterThan(k, v)      => greaterThan(k, v, false)
-      case GreaterThanEqual(k, v) => greaterThan(k, v, true)
-      case LessThan(k, v)         => lessThan(k, v, false)
-      case LessThanEqual(k, v)    => lessThan(k, v, true)
-      case q: In                  => findImpl(q.toOrQuery, offset)
-      case q: PatternQuery        => strPattern(q, offset)
-      case HasKey(k)              => hasKey(k, offset)
-      case True                   => all.clone()
+      case And(q1, q2)            => and(idx, q1, q2, offset)
+      case Or(q1, q2)             => or(idx, q1, q2, offset)
+      case Not(q)                 => diff(idx, all(idx), findImpl(idx, q, offset))
+      case Equal(k, v)            => equal(idx, k, v, offset)
+      case GreaterThan(k, v)      => greaterThan(idx, k, v, false)
+      case GreaterThanEqual(k, v) => greaterThan(idx, k, v, true)
+      case LessThan(k, v)         => lessThan(idx, k, v, false)
+      case LessThanEqual(k, v)    => lessThan(idx, k, v, true)
+      case q: In                  => findImpl(idx, q.toOrQuery, offset)
+      case q: PatternQuery        => strPattern(idx, q, offset)
+      case HasKey(k)              => hasKey(idx, k, offset)
+      case True                   => all(idx).clone()
       case False                  => new RoaringBitmap()
     }
   }
 
-  private def diff(s1: RoaringBitmap, s2: RoaringBitmap): RoaringBitmap = {
+  private def diff(idx: Int, s1: RoaringBitmap, s2: RoaringBitmap): RoaringBitmap = {
     val s = s1.clone()
     s.andNot(s2)
     s
@@ -221,34 +228,34 @@ class RoaringTagIndex[T <: TaggedItem](
     s
   }
 
-  private def and(q1: Query, q2: Query, offset: Int): RoaringBitmap = {
-    val s1 = findImpl(q1, offset)
+  private def and(idx: Int, q1: Query, q2: Query, offset: Int): RoaringBitmap = {
+    val s1 = findImpl(idx, q1, offset)
     if (s1.isEmpty) s1 else {
       // Short circuit, only perform second query if s1 is not empty
-      val s2 = findImpl(q2, offset)
+      val s2 = findImpl(idx, q2, offset)
       s1.and(s2)
       s1
     }
   }
 
-  private def or(q1: Query, q2: Query, offset: Int): RoaringBitmap = {
-    val s1 = findImpl(q1, offset)
-    val s2 = findImpl(q2, offset)
+  private def or(idx: Int, q1: Query, q2: Query, offset: Int): RoaringBitmap = {
+    val s1 = findImpl(idx, q1, offset)
+    val s2 = findImpl(idx, q2, offset)
     s1.or(s2)
     s1
   }
 
-  private def equal(k: String, v: String, offset: Int): RoaringBitmap = {
+  private def equal(idx: Int, k: String, v: String, offset: Int): RoaringBitmap = {
     val internedK = interner.intern(k)
     val vidx = itemIndex.get(internedK)
     if (vidx == null) new RoaringBitmap() else {
       val internedV = interner.intern(v)
       val matchSet = vidx.get(internedV)
-      if (matchSet == null) new RoaringBitmap() else withOffset(matchSet, offset)
+      if (matchSet == null) new RoaringBitmap() else withOffset(matchSet(idx), offset)
     }
   }
 
-  private def greaterThan(k: String, v: String, orEqual: Boolean): RoaringBitmap = {
+  private def greaterThan(idx: Int, k: String, v: String, orEqual: Boolean): RoaringBitmap = {
     val internedK = interner.intern(k)
     val vidx = itemIndex.get(internedK)
     if (vidx == null) new RoaringBitmap() else {
@@ -256,19 +263,19 @@ class RoaringTagIndex[T <: TaggedItem](
       val tag = Tag(internedK, v, -1)
       var i = tagOffset(tag)
       // Skip if equal
-      if (!orEqual && i < tagIndex.length && tagIndex(i).key == internedK && tagIndex(i).value == v) {
+      if (!orEqual && i < tags.length && tags(i).key == internedK && tags(i).value == v) {
         i += 1
       }
       // Data is sorted, no need to perform a check for each entry if key matches
-      while (i < tagIndex.length && tagIndex(i).key == internedK) {
-        set.or(vidx.get(tagIndex(i).value))
+      while (i < tags.length && tags(i).key == internedK) {
+        set.or(vidx.get(tags(i).value)(idx))
         i += 1
       }
       set
     }
   }
 
-  private def lessThan(k: String, v: String, orEqual: Boolean): RoaringBitmap = {
+  private def lessThan(idx: Int, k: String, v: String, orEqual: Boolean): RoaringBitmap = {
     val internedK = interner.intern(k)
     val vidx = itemIndex.get(internedK)
     if (vidx == null) new RoaringBitmap() else {
@@ -276,19 +283,19 @@ class RoaringTagIndex[T <: TaggedItem](
       val tag = Tag(internedK, v, -1)
       var i = tagOffset(tag)
       // Skip if equal
-      if (!orEqual && i >= 0 && tagIndex(i).key == internedK && tagIndex(i).value == v) {
+      if (!orEqual && i >= 0 && tags(i).key == internedK && tags(i).value == v) {
         i -= 1
       }
       // Data is sorted, no need to perform a check for each entry if key matches
-      while (i >= 0 && tagIndex(i).key == internedK) {
-        set.or(vidx.get(tagIndex(i).value))
+      while (i >= 0 && tags(i).key == internedK) {
+        set.or(vidx.get(tags(i).value)(idx))
         i -= 1
       }
       set
     }
   }
 
-  private def strPattern(q: Query.PatternQuery, offset: Int): RoaringBitmap = {
+  private def strPattern(idx: Int, q: Query.PatternQuery, offset: Int): RoaringBitmap = {
     val internedK = interner.intern(q.k)
     val vidx = itemIndex.get(internedK)
     if (vidx == null) new RoaringBitmap() else {
@@ -297,11 +304,11 @@ class RoaringTagIndex[T <: TaggedItem](
         val prefix = q.pattern.prefix.get
         val tag = Tag(internedK, prefix, -1)
         var i = tagOffset(tag)
-        while (i < tagIndex.length &&
-          tagIndex(i).key == internedK &&
-          tagIndex(i).value.startsWith(prefix)) {
-          if (q.check(tagIndex(i).value)) {
-            set.or(vidx.get(tagIndex(i).value))
+        while (i < tags.length &&
+          tags(i).key == internedK &&
+          tags(i).value.startsWith(prefix)) {
+          if (q.check(tags(i).value)) {
+            set.or(vidx.get(tags(i).value)(idx))
           }
           i += 1
         }
@@ -310,17 +317,17 @@ class RoaringTagIndex[T <: TaggedItem](
         while (entries.hasNext) {
           val entry = entries.next()
           if (q.check(entry.getKey))
-            set.or(withOffset(entry.getValue, offset))
+            set.or(withOffset(entry.getValue()(idx), offset))
         }
       }
       set
     }
   }
 
-  private def hasKey(k: String, offset: Int): RoaringBitmap = {
+  private def hasKey(idx: Int, k: String, offset: Int): RoaringBitmap = {
     val internedK = interner.intern(k)
     val matchSet = keyIndex.get(internedK)
-    if (matchSet == null) new RoaringBitmap() else withOffset(matchSet, offset)
+    if (matchSet == null) new RoaringBitmap() else withOffset(matchSet(idx), offset)
   }
 
   private def itemOffset(v: String): Int = {
@@ -333,12 +340,46 @@ class RoaringTagIndex[T <: TaggedItem](
 
   private def tagOffset(v: Tag): Int = {
     if (v == null || v.key == "") 0 else {
-      val pos = util.Arrays.binarySearch(tagIndex.asInstanceOf[Array[AnyRef]], v)
+      val pos = util.Arrays.binarySearch(tags.asInstanceOf[Array[AnyRef]], v)
       if (pos == -1) 0 else if (pos < -1) -pos - 1 else pos
     }
   }
 
   def findTags(query: TagQuery): List[Tag] = {
+    import com.netflix.atlas.core.model.Query._
+    val q = query.query.getOrElse(Query.True)
+    val k = query.key
+    val offset = tagOffset(query.offsetTag)
+    if (k.isDefined) {
+      findValues(query).map(v => Tag(k.get, v))
+    } else {
+      // If key is restricted add a has query to search
+      val finalQ = if (k.isEmpty) q else And(HasKey(k.get), q)
+
+      val matchSet = findImpl(Tags, finalQ, 0)
+      val result = List.newBuilder[Tag]
+      val iter = matchSet.getIntIterator
+      while (iter.hasNext) {
+        result += this.tags(iter.next())
+      }
+
+      val ts = result.result()
+      ts
+    }
+  }
+
+  def findKeys(query: TagQuery): List[TagKey] = {
+    val q = query.query.getOrElse(Query.True)
+    val matchSet = findImpl(Keys, q, 0)
+    val iter = matchSet.getIntIterator
+    val result = List.newBuilder[TagKey]
+    while (iter.hasNext) {
+      result += TagKey(keys(iter.next()), -1)
+    }
+    result.result()
+  }
+
+  def findValues(query: TagQuery): List[String] = {
     import com.netflix.atlas.core.model.Query._
     val q = query.query
     val k = query.key
@@ -349,72 +390,15 @@ class RoaringTagIndex[T <: TaggedItem](
         if (q.isDefined) And(HasKey(k.get), q.get) else HasKey(k.get)
       }
 
-      // Count how many tags match the query
-      val counts = new IntIntHashMap(-1)
-      val itemSet = findImpl(finalQ, 0)
-      val iter = itemSet.getIntIterator
+      val matchSet = findImpl(Values, finalQ, 0)
+      val iter = matchSet.getIntIterator
+      val result = List.newBuilder[String]
       while (iter.hasNext) {
-        val tags = itemTags(iter.next())
-        var i = 0
-        while (i < tags.length) {
-          val t = tags(i)
-          if (t >= offset && (k.isEmpty || tagIndex(t).key == k.get)) {
-            counts.increment(t, 1)
-          }
-          i += 1
-        }
+        result += values(iter.next())
       }
-
-      // Create array with final set of matching tags
-      val result = new Array[Tag](counts.size)
-      var i = 0
-      counts.foreach { (k, v) =>
-        val t = tagIndex(k)
-        result(i) = Tag(t.key, t.value, v)
-        i += 1
-      }
-      util.Arrays.sort(result.asInstanceOf[Array[AnyRef]])
-
-      // Create list based on limit per page
-      val limit = math.min(query.limit, result.length)
-      val listBuilder = List.newBuilder[Tag]
-      i = 0
-      while (i < limit) {
-        listBuilder += result(i)
-        i += 1
-      }
-      listBuilder.result
+      result.result()
     } else {
-      // If no query, use precomputed array of all tags
-      val limit = math.min(query.extendedLimit(offset), tagIndex.length)
-      val listBuilder = List.newBuilder[Tag]
-      var i = offset
-      while (i < limit) {
-        listBuilder += tagIndex(i)
-        i += 1
-      }
-      listBuilder.result
-    }
-  }
-
-  def findKeys(query: TagQuery): List[TagKey] = {
-    findValues(query).map { v => TagKey(v, -1) }
-  }
-
-  def findValues(query: TagQuery): List[String] = {
-    val k = query.key
-    if (k.isDefined) {
-      val offset = k.get + "," + query.offset
-      val tags = findTags(TagQuery(query.query, k, offset, query.limit))
-      tags.map(_.value)
-    } else {
-      import scala.collection.JavaConverters._
-      val tags = findTags(TagQuery(query.query))
-      val dedupedKeys = new java.util.HashSet[String]
-      tags.foreach { t =>
-        if (t.key > query.offset) dedupedKeys.add(t.key)
-      }
-      dedupedKeys.asScala.toList.sortWith(_ < _).take(query.limit)
+      findKeys(query).map(_.name)
     }
   }
 
@@ -422,7 +406,7 @@ class RoaringTagIndex[T <: TaggedItem](
     val offset = itemOffset(query.offset)
     val limit = query.limit
     val list = List.newBuilder[T]
-    val intSet = query.query.fold(withOffset(all, offset))(q => findImpl(q, offset))
+    val intSet = query.query.fold(withOffset(all(Items), offset))(q => findImpl(Items, q, offset))
     val iter = intSet.getIntIterator
     var count = 0
     while (iter.hasNext && count < limit) {
