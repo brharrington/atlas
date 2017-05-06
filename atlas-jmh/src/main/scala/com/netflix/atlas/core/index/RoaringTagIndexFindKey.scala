@@ -46,10 +46,12 @@ import org.openjdk.jmh.infra.Blackhole
   * [info] RoaringTagIndexFindKey.findKeysAll      thrpt   10  8448.916 ± 541.340  ops/s  new index
   *
   * Before
+  * [info] RoaringTagIndexFindKey.findKeysAll            thrpt   10   262.487 ±  60.949  ops/s
   * [info] RoaringTagIndexFindKey.findValuesAllMany      thrpt   10   670.421 ±  43.791  ops/s
   * [info] RoaringTagIndexFindKey.findValuesAllOne       thrpt   10  1486.930 ± 842.386  ops/s
   *
   * After
+  * [info] RoaringTagIndexFindKey.findKeysAll            thrpt   10     8448.916 ±    541.340  ops/s
   * [info] RoaringTagIndexFindKey.findValuesAllMany      thrpt   10    11108.267 ±    149.158  ops/s
   * [info] RoaringTagIndexFindKey.findValuesAllOne       thrpt   10  3632917.244 ± 363144.689  ops/s
   * ```
