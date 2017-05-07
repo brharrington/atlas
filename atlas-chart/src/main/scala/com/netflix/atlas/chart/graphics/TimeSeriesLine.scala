@@ -35,7 +35,7 @@ case class TimeSeriesLine(
     style: Style,
     ts: TimeSeq,
     xaxis: TimeAxis,
-    yaxis: ValueAxis) extends Element {
+    yaxis: ValueYAxis) extends Element {
 
   def draw(g: Graphics2D, x1: Int, y1: Int, x2: Int, y2: Int): Unit = {
     style.configure(g)

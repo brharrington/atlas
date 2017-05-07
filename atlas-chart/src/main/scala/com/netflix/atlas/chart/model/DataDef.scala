@@ -31,7 +31,7 @@ sealed trait DataDef {
 }
 
 /**
- * Defintion for a time series line.
+ * Definition for a time series line.
  *
  * @param data
  *     Time series with the underlying data to render.
@@ -56,7 +56,7 @@ case class LineDef(
 }
 
 /**
- * Defintion for a horizontal span.
+ * Definition for a horizontal span.
  *
  * @param v1
  *     Starting value for the span.
@@ -73,7 +73,7 @@ case class HSpanDef(v1: Double, v2: Double, color: Color, labelOpt: Option[Strin
 }
 
 /**
- * Defintion for a vertical span.
+ * Definition for a vertical span.
  *
  * @param t1
  *     Starting time for the span.
@@ -99,4 +99,13 @@ case class VSpanDef(t1: Instant, t2: Instant, color: Color, labelOpt: Option[Str
   */
 case class MessageDef(label: String, color: Color = Color.BLACK) extends DataDef {
   def withColor(c: Color) = copy(color = c)
+}
+
+case class PointDef(
+    v: Double,
+    label: String,
+    shape: PointShape = PointShape.CIRCLE,
+    fill: Boolean = true,
+    color: Color = Color.BLACK) extends DataDef {
+  def withColor(c: Color): PointDef = copy(color = c)
 }

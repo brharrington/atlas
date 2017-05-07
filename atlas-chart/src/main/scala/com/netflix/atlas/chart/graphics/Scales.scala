@@ -43,6 +43,14 @@ object Scales {
     case Scale.SQRT        => yscale(power(0.5))
   }
 
+  /** Returns the appropriate X-value scale factory for the scale enum type. */
+  def factoryForXAxis(s: Scale): DoubleFactory = s match {
+    case Scale.LINEAR      => linear
+    case Scale.LOGARITHMIC => logarithmic
+    case Scale.POWER_2     => power(2.0)
+    case Scale.SQRT        => power(0.5)
+  }
+
   /** Factory for a linear mapping. */
   def linear(d1: Double, d2: Double, r1: Int, r2: Int): DoubleScale = {
     val pixelSpan = (d2 - d1) / (r2 - r1)

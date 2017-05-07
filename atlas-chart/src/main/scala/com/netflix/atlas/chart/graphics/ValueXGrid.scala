@@ -18,30 +18,30 @@ package com.netflix.atlas.chart.graphics
 import java.awt.Graphics2D
 
 /**
- * Draws horizontal grid lines based on a value axis.
- *
- * @param yaxis
- *     Axis to use for creating the scale and determining the the tick marks that correspond with
- *     the major grid lines.
- * @param major
- *     Style to use for drawing the major tick lines.
- * @param minor
- *     Style to use for drawing the minor tick lines.
- */
-case class ValueGrid(
-    yaxis: ValueAxis,
-    major: Style = Constants.majorGridStyle,
-    minor: Style = Constants.minorGridStyle) extends Element {
+  * Draws vertical grid lines based on a value axis.
+  *
+  * @param xaxis
+  *     Axis to use for creating the scale and determining the the tick marks that correspond with
+  *     the major grid lines.
+  * @param major
+  *     Style to use for drawing the major tick lines.
+  * @param minor
+  *     Style to use for drawing the minor tick lines.
+  */
+case class ValueXGrid(
+  xaxis: ValueXAxis,
+  major: Style = Constants.majorGridStyle,
+  minor: Style = Constants.minorGridStyle) extends Element {
 
   def draw(g: Graphics2D, x1: Int, y1: Int, x2: Int, y2: Int): Unit = {
-    val yscale = yaxis.scale(y1, y2)
-    val ticks = yaxis.ticks(y1, y2)
+    val xscale = xaxis.scale(x1, x2)
+    val ticks = xaxis.ticks(x1, x2)
 
     ticks.foreach { tick =>
       if (tick.major) major.configure(g) else minor.configure(g)
-      val py = yscale(tick.v)
-      if (py != y1 && py != y2) {
-        g.drawLine(x1, py, x2, py)
+      val px = xscale(tick.v)
+      if (px != x1 && px != x2) {
+        g.drawLine(px, y1, px, y2)
       }
     }
   }

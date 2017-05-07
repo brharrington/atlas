@@ -38,7 +38,7 @@ case class TimeSeriesStack(
     style: Style,
     ts: TimeSeq,
     xaxis: TimeAxis,
-    yaxis: ValueAxis,
+    yaxis: ValueYAxis,
     offsets: TimeSeriesStack.Offsets) extends Element {
 
   def draw(g: Graphics2D, x1: Int, y1: Int, x2: Int, y2: Int): Unit = {

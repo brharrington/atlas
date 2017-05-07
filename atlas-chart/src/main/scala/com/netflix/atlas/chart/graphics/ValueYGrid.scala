@@ -18,27 +18,33 @@ package com.netflix.atlas.chart.graphics
 import java.awt.Graphics2D
 
 /**
- * Draws a horizontal span from `v1` to `v2`.
+ * Draws horizontal grid lines based on a value axis.
  *
- * @param style
- *     Style to use for filling the span.
- * @param v1
- *     Starting value for the span.
- * @param v2
- *     Ending value for the span.
  * @param yaxis
- *     Axis used for creating the scale.
+ *     Axis to use for creating the scale and determining the the tick marks that correspond with
+ *     the major grid lines.
+ * @param major
+ *     Style to use for drawing the major tick lines.
+ * @param minor
+ *     Style to use for drawing the minor tick lines.
  */
-case class ValueSpan(style: Style, v1: Double, v2: Double, yaxis: ValueYAxis) extends Element {
+case class ValueYGrid(
+    yaxis: ValueYAxis,
+    major: Style = Constants.majorGridStyle,
+    minor: Style = Constants.minorGridStyle) extends Element {
 
   def draw(g: Graphics2D, x1: Int, y1: Int, x2: Int, y2: Int): Unit = {
-    style.configure(g)
     val yscale = yaxis.scale(y1, y2)
-    val p1 = yscale(v1)
-    val p2 = yscale(v2)
-    val py1 = math.min(p1, p2)
-    val py2 = math.max(p1, p2)
-    g.fillRect(x1, py1, x2 - x1, py2 - py1)
+    val ticks = yaxis.ticks(y1, y2)
+
+    ticks.foreach { tick =>
+      if (tick.major) major.configure(g) else minor.configure(g)
+      val py = yscale(tick.v)
+      if (py != y1 && py != y2) {
+        g.drawLine(x1, py, x2, py)
+      }
+    }
   }
 }
+
 

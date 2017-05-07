@@ -63,9 +63,9 @@ case class TimeSeriesGraph(graphDef: GraphDef) extends Element with FixedHeight 
   val yaxes = graphDef.plots.zipWithIndex.map { case (plot, i) =>
     val bounds = plot.bounds(start, end)
     if (i == 0)
-      LeftValueAxis(plot, bounds._1, bounds._2)
+      LeftValueYAxis(plot, bounds._1, bounds._2)
     else
-      RightValueAxis(plot, bounds._1, bounds._2)
+      RightValueYAxis(plot, bounds._1, bounds._2)
   }
 
   private def clip(g: Graphics2D, x1: Int, y1: Int, x2: Int, y2: Int): Unit = {
@@ -131,7 +131,7 @@ case class TimeSeriesGraph(graphDef: GraphDef) extends Element with FixedHeight 
       }
     }
 
-    val valueGrid = ValueGrid(yaxes.head)
+    val valueGrid = ValueYGrid(yaxes.head)
     valueGrid.draw(g, x1 + leftOffset, y1, x2 - rightOffset, chartEnd)
     if (showAxes) {
       yaxes.head.draw(g, x1, y1, x1 + leftAxisW - 1, chartEnd)

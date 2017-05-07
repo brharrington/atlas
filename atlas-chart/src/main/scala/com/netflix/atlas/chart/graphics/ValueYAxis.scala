@@ -21,9 +21,9 @@ import com.netflix.atlas.chart.model.PlotDef
 import com.netflix.atlas.chart.model.TickLabelMode
 import com.netflix.atlas.core.util.UnitPrefix
 
-sealed trait ValueAxis extends Element with FixedWidth {
+sealed trait ValueYAxis extends Element with FixedWidth {
 
-  import ValueAxis._
+  import ValueYAxis._
 
   override def width: Int = labelHeight + tickLabelWidth + tickMarkLength + 1
 
@@ -80,12 +80,12 @@ sealed trait ValueAxis extends Element with FixedWidth {
   }
 }
 
-case class LeftValueAxis(
+case class LeftValueYAxis(
     plotDef: PlotDef,
     min: Double,
-    max: Double) extends ValueAxis {
+    max: Double) extends ValueYAxis {
 
-  import ValueAxis._
+  import ValueYAxis._
 
   protected def angle: Double = -Math.PI / 2.0
 
@@ -150,12 +150,12 @@ case class LeftValueAxis(
   }
 }
 
-case class RightValueAxis(
+case class RightValueYAxis(
     plotDef: PlotDef,
     min: Double,
-    max: Double) extends ValueAxis {
+    max: Double) extends ValueYAxis {
 
-  import ValueAxis._
+  import ValueYAxis._
 
   protected def angle: Double = Math.PI / 2.0
 
@@ -220,7 +220,7 @@ case class RightValueAxis(
   }
 }
 
-object ValueAxis {
+object ValueYAxis {
 
   val labelHeight = Constants.normalFontDims.height
 
