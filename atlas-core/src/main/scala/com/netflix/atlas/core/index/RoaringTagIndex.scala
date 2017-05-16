@@ -121,6 +121,16 @@ class RoaringTagIndex[T <: TaggedItem](
     bitmaps
   }
 
+  private def createPositionMap[V <: AnyRef](data: Array[V]): RefIntHashMap[V] = {
+    val map = new RefIntHashMap[V](2 * keys.length)
+    var i = 0
+    while (i < data.length) {
+      map.put(data(i), i)
+      i += 1
+    }
+    map
+  }
+
   private def buildItemIndex(): (Array[BigInteger], RoaringKeyMap, RoaringValueMap) = {
     // Sort items array based on the id, allows for efficient paging of requests using the id
     // as the offset
@@ -128,20 +138,9 @@ class RoaringTagIndex[T <: TaggedItem](
     util.Arrays.sort(items, idComparator)
     val itemIds = new Array[BigInteger](items.length)
 
-    val keyPositions = new RefIntHashMap[String](2 * keys.length)
-    keys.indices.foreach { i =>
-      keyPositions.put(keys(i), i)
-    }
-
-    val valuePositions = new RefIntHashMap[String](2 * values.length)
-    values.indices.foreach { i =>
-      valuePositions.put(values(i), i)
-    }
-
-    val tagPositions = new RefIntHashMap[Tag](2 * tags.length)
-    tags.indices.foreach { i =>
-      tagPositions.put(tags(i), i)
-    }
+    val keyPositions = createPositionMap(keys)
+    val valuePositions = createPositionMap(values)
+    val tagPositions = createPositionMap(tags)
 
     // Build the main index
     logger.debug(s"building index with ${items.length} items, create main key map")

@@ -33,7 +33,7 @@ import org.openjdk.jmh.infra.Blackhole
   * regex being used in real queries and not being used in this synthetic data.
   *
   * ```
-  * > jmh:run -wi 10 -i 10 -f1 -t1 .*QueryIndexMatching.*
+  * > jmh:run -wi 10 -i 10 -f1 -t1 .*RoaringTagIndexBench.*
   * ```
   *
   * Initial results:
@@ -57,7 +57,7 @@ import org.openjdk.jmh.infra.Blackhole
   * ```
   */
 @State(Scope.Thread)
-class RoaringTagIndexFindKey {
+class RoaringTagIndexBench {
 
   private val baseId = Map(
     "nf.app"     -> "atlas_backend",
@@ -81,6 +81,11 @@ class RoaringTagIndexFindKey {
   }
 
   private val index = new RoaringTagIndex[BasicTaggedItem](items.toArray)
+
+  @Benchmark
+  def create(bh: Blackhole): Unit = {
+    bh.consume(new RoaringTagIndex[BasicTaggedItem](items.toArray))
+  }
 
   @Benchmark
   def findKeysAll(bh: Blackhole): Unit = {

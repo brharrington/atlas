@@ -23,7 +23,7 @@ package com.netflix.atlas.core.util
   *     Initial capacity guideline. The actual size of the underlying buffer
   *     will be the next prime >= `capacity`. Default is 10.
   */
-class RefIntHashMap[T](capacity: Int = 10) {
+class RefIntHashMap[T <: AnyRef](capacity: Int = 10) {
 
   private[this] var keys = newArray(capacity)
   private[this] var values = new Array[Int](keys.length)
