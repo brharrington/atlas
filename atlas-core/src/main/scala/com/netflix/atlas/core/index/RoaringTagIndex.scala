@@ -16,7 +16,6 @@
 package com.netflix.atlas.core.index
 
 import java.math.BigInteger
-import java.util
 import java.util.Comparator
 
 import com.netflix.atlas.core.model.Query
@@ -68,8 +67,8 @@ class RoaringTagIndex[T <: TaggedItem](
 
   import com.netflix.atlas.core.index.RoaringTagIndex._
 
-  type RoaringValueMap = util.IdentityHashMap[String, Array[RoaringBitmap]]
-  type RoaringKeyMap = util.IdentityHashMap[String, RoaringValueMap]
+  type RoaringValueMap = java.util.IdentityHashMap[String, Array[RoaringBitmap]]
+  type RoaringKeyMap = java.util.IdentityHashMap[String, RoaringValueMap]
 
   // Interner to use for building the index
   private val buildInterner = if (internWhileBuilding) interner else new NoopInterner[String]
@@ -80,9 +79,9 @@ class RoaringTagIndex[T <: TaggedItem](
   }
 
   private val (keys, values, tags) = {
-    val keySet = new util.TreeSet[String]()
-    val valueSet = new util.TreeSet[String]()
-    val tagSet = new util.TreeSet[Tag]()
+    val keySet = new java.util.TreeSet[String]()
+    val valueSet = new java.util.TreeSet[String]()
+    val tagSet = new java.util.TreeSet[Tag]()
     var pos = 0
     while (pos < items.length) {
       items(pos).foreach { (k, v) =>
@@ -137,7 +136,7 @@ class RoaringTagIndex[T <: TaggedItem](
     // Sort items array based on the id, allows for efficient paging of requests using the id
     // as the offset
     logger.debug(s"building index with ${items.length} items, starting sort")
-    util.Arrays.sort(items, idComparator)
+    java.util.Arrays.sort(items, idComparator)
     val itemIds = new Array[BigInteger](items.length)
 
     val keyPositions = createPositionMap(keys)
@@ -308,9 +307,9 @@ class RoaringTagIndex[T <: TaggedItem](
         val prefix = q.pattern.prefix.get
         val tag = Tag(internedK, prefix, -1)
         var i = tagOffset(tag)
-        while (i < tags.length &&
-          tags(i).key == internedK &&
-          tags(i).value.startsWith(prefix)) {
+        while (i < tags.length
+          && tags(i).key == internedK
+          && tags(i).value.startsWith(prefix)) {
           if (q.check(tags(i).value)) {
             set.or(vidx.get(tags(i).value)(idx))
           }
@@ -337,42 +336,41 @@ class RoaringTagIndex[T <: TaggedItem](
   private def itemOffset(v: String): Int = {
     if (v == null || v == "") 0 else {
       val offsetV = new BigInteger(v, 16)
-      val pos = util.Arrays.binarySearch(itemIds.asInstanceOf[Array[AnyRef]], offsetV)
+      val pos = java.util.Arrays.binarySearch(itemIds.asInstanceOf[Array[AnyRef]], offsetV)
       if (pos < 0) -pos - 1 else pos
     }
   }
 
   private def tagOffset(v: Tag): Int = {
-    if (v == null || v.key == "") 0 else {
-      val pos = util.Arrays.binarySearch(tags.asInstanceOf[Array[AnyRef]], v)
+    if (v == null) 0 else {
+      val pos = java.util.Arrays.binarySearch(tags.asInstanceOf[Array[AnyRef]], v)
       if (pos == -1) 0 else if (pos < -1) -pos - 1 else pos
     }
   }
 
   private def findOffset[V <: AnyRef](vs: Array[V], v: V): Int = {
     if (v == null) 0 else {
-      val pos = util.Arrays.binarySearch(vs.asInstanceOf[Array[AnyRef]], v)
+      val pos = java.util.Arrays.binarySearch(vs.asInstanceOf[Array[AnyRef]], v)
       if (pos == -1) 0 else if (pos < -1) -pos - 2 else pos
     }
   }
 
   def findTags(query: TagQuery): List[Tag] = {
-    import com.netflix.atlas.core.model.Query._
     val q = query.query.getOrElse(Query.True)
     val k = query.key
     if (k.isDefined) {
       val tq = query.copy(offset = query.offsetTag.value)
       findValues(tq).map(v => Tag(k.get, v))
     } else {
-      val offset = tagOffset(query.offsetTag)
+      val offset = findOffset(tags, query.offsetTag)
       // If key is restricted add a has query to search
-      val finalQ = if (k.isEmpty) q else And(HasKey(k.get), q)
+      val finalQ = if (k.isEmpty) q else Query.And(Query.HasKey(k.get), q)
 
       val matchSet = withOffset(findImpl(Tags, finalQ, 0), offset)
       val result = List.newBuilder[Tag]
       val iter = matchSet.getIntIterator
       while (iter.hasNext) {
-        result += this.tags(iter.next())
+        result += tags(iter.next())
       }
 
       val ts = result.result()

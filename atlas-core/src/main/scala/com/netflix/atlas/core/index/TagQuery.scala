@@ -17,7 +17,6 @@ package com.netflix.atlas.core.index
 
 import com.netflix.atlas.core.model.Query
 import com.netflix.atlas.core.model.Tag
-import com.netflix.atlas.core.model.TagKey
 
 case class TagQuery(
     query: Option[Query],
@@ -32,19 +31,5 @@ case class TagQuery(
       Tag(offset, null, Integer.MAX_VALUE)
     else
       Tag(offset.substring(0, comma), offset.substring(comma + 1), Integer.MAX_VALUE)
-  }
-
-  /** Parse the offset string to a tag key object. */
-  lazy val offsetTagKey: TagKey = {
-    TagKey(offset, Integer.MAX_VALUE)
-  }
-
-  /** Check if key matches. */
-  def checkKey(k: String): Boolean = key.forall(_ == k)
-
-  /** Extend the limit if possible without overflowing. */
-  def extendedLimit(amount: Int): Int = {
-    val newLimit = limit + amount
-    if (newLimit < 0) Integer.MAX_VALUE else newLimit
   }
 }
