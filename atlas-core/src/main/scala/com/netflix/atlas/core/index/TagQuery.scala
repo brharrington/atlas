@@ -29,7 +29,7 @@ case class TagQuery(
   lazy val offsetTag: Tag = {
     val comma = offset.indexOf(",")
     if (comma == -1)
-      Tag(offset, "", Integer.MAX_VALUE)
+      Tag(offset, null, Integer.MAX_VALUE)
     else
       Tag(offset.substring(0, comma), offset.substring(comma + 1), Integer.MAX_VALUE)
   }

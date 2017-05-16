@@ -41,6 +41,8 @@ object RoaringTagIndex {
   def empty[T <: TaggedItem: Manifest]: RoaringTagIndex[T] = {
     new RoaringTagIndex(new Array[T](0))
   }
+
+  private case class Positions(key: Int, value: Int, tag: Int)
 }
 
 /**
@@ -149,10 +151,13 @@ class RoaringTagIndex[T <: TaggedItem](
     var pos = 0
     while (pos < items.length) {
       itemIds(pos) = items(pos).id
-      val itemTags = new Array[Tag](items(pos).tags.size)
+      val itemTags = new Array[Positions](items(pos).tags.size)
       var i = 0
       items(pos).foreach { (k, v) =>
-        itemTags(i) = Tag(k.intern(), v.intern())
+        itemTags(i) = Positions(
+          key = keyPositions.get(k, -1),
+          value = valuePositions.get(v, -1),
+          tag = tagPositions.get(Tag(k, v), -1))
         i += 1
       }
       items(pos).foreach { (k, v) =>
@@ -172,9 +177,9 @@ class RoaringTagIndex[T <: TaggedItem](
         }
         matchSet(Items).add(pos)
         itemTags.foreach { t =>
-          matchSet(Keys).add(keyPositions.get(t.key, -1))
-          matchSet(Values).add(valuePositions.get(t.value, -1))
-          matchSet(Tags).add(tagPositions.get(t, -1))
+          matchSet(Keys).add(t.key)
+          matchSet(Values).add(t.value)
+          matchSet(Tags).add(t.tag)
         }
 
         // Add to key index
@@ -187,7 +192,7 @@ class RoaringTagIndex[T <: TaggedItem](
         matchSet(Keys).add(keyPositions.get(internedK, -1))
         matchSet(Values).add(valuePositions.get(internedV, -1))
         itemTags.foreach { t =>
-          matchSet(Tags).add(tagPositions.get(t, -1))
+          matchSet(Tags).add(t.tag)
         }
       }
       pos += 1
@@ -344,18 +349,26 @@ class RoaringTagIndex[T <: TaggedItem](
     }
   }
 
+  private def findOffset[V <: AnyRef](vs: Array[V], v: V): Int = {
+    if (v == null) 0 else {
+      val pos = util.Arrays.binarySearch(vs.asInstanceOf[Array[AnyRef]], v)
+      if (pos == -1) 0 else if (pos < -1) -pos - 2 else pos
+    }
+  }
+
   def findTags(query: TagQuery): List[Tag] = {
     import com.netflix.atlas.core.model.Query._
     val q = query.query.getOrElse(Query.True)
     val k = query.key
-    val offset = tagOffset(query.offsetTag)
     if (k.isDefined) {
-      findValues(query).map(v => Tag(k.get, v))
+      val tq = query.copy(offset = query.offsetTag.value)
+      findValues(tq).map(v => Tag(k.get, v))
     } else {
+      val offset = tagOffset(query.offsetTag)
       // If key is restricted add a has query to search
       val finalQ = if (k.isEmpty) q else And(HasKey(k.get), q)
 
-      val matchSet = findImpl(Tags, finalQ, 0)
+      val matchSet = withOffset(findImpl(Tags, finalQ, 0), offset)
       val result = List.newBuilder[Tag]
       val iter = matchSet.getIntIterator
       while (iter.hasNext) {
@@ -369,47 +382,38 @@ class RoaringTagIndex[T <: TaggedItem](
 
   def findKeys(query: TagQuery): List[TagKey] = {
     val q = query.query.getOrElse(Query.True)
-    val matchSet = findImpl(Keys, q, 0)
-    val iter = matchSet.getIntIterator
-    val result = List.newBuilder[TagKey]
-    while (iter.hasNext) {
-      result += TagKey(keys(iter.next()), -1)
-    }
-    result.result()
+    val offset = findOffset(keys, query.offset)
+    val matchSet = withOffset(findImpl(Keys, q, 0), offset)
+    createResultList(keys, matchSet, query.limit).map(v => TagKey(v, -1))
   }
 
   def findValues(query: TagQuery): List[String] = {
+    require(query.key.isDefined, "key must be defined for findValues query")
     import com.netflix.atlas.core.model.Query._
     val q = query.query
-    val k = query.key
-    val offset = tagOffset(query.offsetTag)
-    if (q.isDefined || k.isDefined) {
-      // If key is restricted add a has query to search
-      val finalQ = if (k.isEmpty) q.get else {
-        if (q.isDefined) And(HasKey(k.get), q.get) else HasKey(k.get)
-      }
+    val k = query.key.get
+    val offset = findOffset(values, query.offset)
 
-      val matchSet = findImpl(Values, finalQ, 0)
-      val iter = matchSet.getIntIterator
-      val result = List.newBuilder[String]
-      while (iter.hasNext) {
-        result += values(iter.next())
-      }
-      result.result()
-    } else {
-      findKeys(query).map(_.name)
-    }
+    // If key is restricted add a has query to search
+    val finalQ = if (q.isDefined) And(HasKey(k), q.get) else HasKey(k)
+
+    val matchSet = withOffset(findImpl(Values, finalQ, 0), offset)
+    createResultList(values, matchSet, query.limit)
   }
 
   def findItems(query: TagQuery): List[T] = {
     val offset = itemOffset(query.offset)
     val limit = query.limit
-    val list = List.newBuilder[T]
     val intSet = query.query.fold(withOffset(all(Items), offset))(q => findImpl(Items, q, offset))
-    val iter = intSet.getIntIterator
+    createResultList(items, intSet, limit)
+  }
+
+  private def createResultList[V <: AnyRef](vs: Array[V], matchSet: RoaringBitmap, limit: Int): List[V] = {
+    val list = List.newBuilder[V]
+    val iter = matchSet.getIntIterator
     var count = 0
     while (iter.hasNext && count < limit) {
-      list += items(iter.next())
+      list += vs(iter.next())
       count += 1
     }
     list.result

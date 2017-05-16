@@ -100,6 +100,52 @@ abstract class TagIndexSuite extends FunSuite {
     assert(result.size === 6)
   }
 
+  test("findValues, with no key") {
+    intercept[IllegalArgumentException] {
+      index.findValues(TagQuery(None))
+    }
+  }
+
+  test("findValues, with limit") {
+    val result = index.findValues(TagQuery(None, key = Some("name"), limit = 3))
+    assert(result === List("sps_0", "sps_1", "sps_2"))
+  }
+
+  test("findValues, with offset") {
+    val result = index.findValues(TagQuery(None, key = Some("name"), offset = "sps_7"))
+    assert(result === List("sps_8", "sps_9"))
+  }
+
+  test("findValues, with offset that is not present") {
+    val result = index.findValues(TagQuery(None, key = Some("name"), offset = "sps_77"))
+    assert(result === List("sps_8", "sps_9"))
+  }
+
+  test("findValues, with offset and limit") {
+    val result = index.findValues(TagQuery(None, key = Some("name"), offset = "sps_7", limit = 1))
+    assert(result === List("sps_8"))
+  }
+
+  test("findKeys, with limit") {
+    val result = index.findKeys(TagQuery(None, limit = 3)).map(_.name)
+    assert(result === List("atlas.legacy", "name", "nf.app"))
+  }
+
+  test("findKeys, with offset") {
+    val result = index.findKeys(TagQuery(None, offset = "nf.asg")).map(_.name)
+    assert(result === List("nf.cluster", "nf.node", "type", "type2"))
+  }
+
+  test("findKeys, with offset that is not present") {
+    val result = index.findKeys(TagQuery(None, offset = "nf.asg2")).map(_.name)
+    assert(result === List("nf.cluster", "nf.node", "type", "type2"))
+  }
+
+  test("findKeys, with offset and limit") {
+    val result = index.findKeys(TagQuery(None, offset = "nf.asg", limit = 2)).map(_.name)
+    assert(result === List("nf.cluster", "nf.node"))
+  }
+
   test("equal query") {
     val q = Query.Equal("name", "sps_9")
     val result = index.findItems(TagQuery(Some(q)))

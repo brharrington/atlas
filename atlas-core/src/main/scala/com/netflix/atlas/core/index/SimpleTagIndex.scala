@@ -101,14 +101,24 @@ class SimpleTagIndex[T <: TaggedItem: ClassTag](items: Array[T]) extends TagInde
   }
 
   def findKeys(query: TagQuery): List[TagKey] = {
-    findValues(query).map(v => TagKey(v))
+    val matches = findItemsImpl(query.query)
+    matches
+      .flatMap(_.tags)
+      .map(_._1)
+      .distinct
+      .filter(_ > query.offset)
+      .sortWith(_ < _)
+      .take(query.limit)
+      .map(v => TagKey(v))
   }
 
   def findValues(query: TagQuery): List[String] = {
+    require(query.key.isDefined)
     val matches = findItemsImpl(query.query)
     val uniq = matches.flatMap(_.tags).distinct
 
-    val forKey = query.key.fold(uniq.map(_._2))(k => uniq.filter(_._1 == k).map(_._1))
+    val k = query.key.get
+    val forKey = uniq.filter(_._1 == k).map(_._2)
     val filtered = forKey.filter(_ > query.offset)
     val sorted = filtered.sortWith(_ < _)
 
