@@ -41,7 +41,7 @@ object RoaringTagIndex {
     new RoaringTagIndex(new Array[T](0))
   }
 
-  private case class Positions(key: Int, value: Int, tag: Int)
+  private case class Positions(key: Int, value: Int) //, tag: Int)
 }
 
 /**
@@ -105,9 +105,9 @@ class RoaringTagIndex[T <: TaggedItem](
     keySet.add(0L, keys.length)
     val valueSet = new RoaringBitmap()
     valueSet.add(0L, values.length)
-    val tagSet = new RoaringBitmap()
-    tagSet.add(0L, tags.length)
-    Array(itemSet, keySet, valueSet, tagSet)
+    //val tagSet = new RoaringBitmap()
+    //tagSet.add(0L, tags.length)
+    Array(itemSet, keySet, valueSet) //, tagSet)
   }
 
   // Primary indexes to search for a tagged item:
@@ -117,13 +117,13 @@ class RoaringTagIndex[T <: TaggedItem](
   private val (itemIds, itemIndex, keyIndex) = buildItemIndex()
 
   private def newBitmaps(): Array[RoaringBitmap] = {
-    val bitmaps = new Array[RoaringBitmap](4)
+    val bitmaps = new Array[RoaringBitmap](3)//4)
     bitmaps.indices.foreach { i => bitmaps(i) = new RoaringBitmap() }
     bitmaps
   }
 
   private def createPositionMap[V <: AnyRef](data: Array[V]): RefIntHashMap[V] = {
-    val map = new RefIntHashMap[V](2 * keys.length)
+    val map = new RefIntHashMap[V](2 * data.length)
     var i = 0
     while (i < data.length) {
       map.put(data(i), i)
@@ -141,7 +141,7 @@ class RoaringTagIndex[T <: TaggedItem](
 
     val keyPositions = createPositionMap(keys)
     val valuePositions = createPositionMap(values)
-    val tagPositions = createPositionMap(tags)
+    //val tagPositions = createPositionMap(tags)
 
     // Build the main index
     logger.debug(s"building index with ${items.length} items, create main key map")
@@ -155,8 +155,8 @@ class RoaringTagIndex[T <: TaggedItem](
       items(pos).foreach { (k, v) =>
         itemTags(i) = Positions(
           key = keyPositions.get(k, -1),
-          value = valuePositions.get(v, -1),
-          tag = tagPositions.get(Tag(k, v), -1))
+          value = valuePositions.get(v, -1))//,
+          //tag = tagPositions.get(Tag(k, v), -1))
         i += 1
       }
       items(pos).foreach { (k, v) =>
@@ -178,7 +178,7 @@ class RoaringTagIndex[T <: TaggedItem](
         itemTags.foreach { t =>
           matchSet(Keys).add(t.key)
           matchSet(Values).add(t.value)
-          matchSet(Tags).add(t.tag)
+          //matchSet(Tags).add(t.tag)
         }
 
         // Add to key index
@@ -190,9 +190,9 @@ class RoaringTagIndex[T <: TaggedItem](
         matchSet(Items).add(pos)
         matchSet(Keys).add(keyPositions.get(internedK, -1))
         matchSet(Values).add(valuePositions.get(internedV, -1))
-        itemTags.foreach { t =>
+        /*itemTags.foreach { t =>
           matchSet(Tags).add(t.tag)
-        }
+        }*/
       }
       pos += 1
     }
@@ -362,7 +362,8 @@ class RoaringTagIndex[T <: TaggedItem](
       val tq = query.copy(offset = query.offsetTag.value)
       findValues(tq).map(v => Tag(k.get, v))
     } else {
-      val offset = findOffset(tags, query.offsetTag)
+      Nil
+      /*val offset = findOffset(tags, query.offsetTag)
       // If key is restricted add a has query to search
       val finalQ = if (k.isEmpty) q else Query.And(Query.HasKey(k.get), q)
 
@@ -374,7 +375,7 @@ class RoaringTagIndex[T <: TaggedItem](
       }
 
       val ts = result.result()
-      ts
+      ts*/
     }
   }
 

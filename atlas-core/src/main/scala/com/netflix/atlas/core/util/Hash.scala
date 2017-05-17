@@ -66,7 +66,7 @@ object Hash {
 
   // If the hash value is `Integer.MIN_VALUE`, then the absolute value will be
   // negative. For our purposes that will get mapped to a starting position of 0.
-  private[util] def absOrZero(v: Int): Int = math.max(math.abs(v), 0)
+  private[util] def absOrZero(v: Int): Int = java.lang.Math.max(math.abs(v), 0)
 
   private def computeHash(algorithm: String, bytes: Array[Byte]) = {
     val md = get(algorithm)
