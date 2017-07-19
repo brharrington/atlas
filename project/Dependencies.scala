@@ -4,7 +4,7 @@ object Dependencies {
   object Versions {
     val akka       = "2.4.12"
     val aws        = "1.11.49"
-    val iep        = "0.4.9"
+    val iep        = "1.0.2"
     val guice      = "4.1.0"
     val jackson    = "2.8.3"
     val log4j      = "2.7"
@@ -32,6 +32,7 @@ object Dependencies {
   val guiceMulti      = "com.google.inject.extensions" % "guice-multibindings" % guice
   val iepGuice        = "com.netflix.iep" % "iep-guice" % iep
   val iepModuleAws    = "com.netflix.iep" % "iep-module-aws" % iep
+  val iepModuleAtlas  = "com.netflix.iep" % "iep-module-atlas" % iep
   val iepService      = "com.netflix.iep" % "iep-service" % iep
   val jacksonAnno2    = "com.fasterxml.jackson.core" % "jackson-annotations" % jackson
   val jacksonCore2    = "com.fasterxml.jackson.core" % "jackson-core" % jackson
