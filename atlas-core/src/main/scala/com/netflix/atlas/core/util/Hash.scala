@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Netflix, Inc.
+ * Copyright 2014-2017 Netflix, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -63,6 +63,10 @@ object Hash {
   def sha1(input: String): BigInteger = {
     computeHash("SHA1", input.getBytes("UTF-8"))
   }
+
+  // If the hash value is `Integer.MIN_VALUE`, then the absolute value will be
+  // negative. For our purposes that will get mapped to a starting position of 0.
+  private[util] def absOrZero(v: Int): Int = math.max(math.abs(v), 0)
 
   private def computeHash(algorithm: String, bytes: Array[Byte]) = {
     val md = get(algorithm)

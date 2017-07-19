@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Netflix, Inc.
+ * Copyright 2014-2017 Netflix, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -161,6 +161,12 @@ class LongIntHashMapSuite extends FunSuite {
 
     // Sanity check size is < 320kb
     assert(igraph.totalSize() <= 320000)
+  }
+
+  test("negative absolute value") {
+    // hashes to Integer.MIN_VALUE causing: java.lang.ArrayIndexOutOfBoundsException: -2
+    val m = new LongIntHashMap(-1, 10)
+    assert(m.get(Integer.MIN_VALUE.toLong - 1, 0) === 0)
   }
 
 }

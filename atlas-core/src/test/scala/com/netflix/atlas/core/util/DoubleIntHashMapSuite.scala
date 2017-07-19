@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Netflix, Inc.
+ * Copyright 2014-2017 Netflix, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -137,6 +137,19 @@ class DoubleIntHashMapSuite extends FunSuite {
 
     // Sanity check size is < 320kb
     assert(igraph.totalSize() <= 320000)
+  }
+
+  test("negative absolute value") {
+    // hashes to Integer.MIN_VALUE causing: java.lang.ArrayIndexOutOfBoundsException: -2
+    //
+    // scala> math.abs(java.lang.Long.hashCode(java.lang.Double.doubleToLongBits(0.778945326637231)))
+    // res9: Int = -2147483648
+    // scala> math.abs(java.lang.Long.hashCode(java.lang.Double.doubleToLongBits(0.17321881641359504)))
+    // res10: Int = -2147483648
+    // scala> math.abs(java.lang.Long.hashCode(java.lang.Double.doubleToLongBits(0.4182373879985505)))
+    // res11: Int = -2147483648
+    val m = new DoubleIntHashMap
+    assert(m.get(0.778945326637231, 0) === 0)
   }
 
 }

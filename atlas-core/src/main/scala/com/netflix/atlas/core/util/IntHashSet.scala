@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Netflix, Inc.
+ * Copyright 2014-2017 Netflix, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -59,7 +59,7 @@ class IntHashSet(noData: Int, capacity: Int = 10) {
   }
 
   private def add(buffer: Array[Int], v: Int): Boolean = {
-    var pos = math.abs(v) % buffer.length
+    var pos = Hash.absOrZero(v) % buffer.length
     var posV = buffer(pos)
     while (posV != noData && posV != v) {
       pos = (pos + 1) % buffer.length

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Netflix, Inc.
+ * Copyright 2014-2017 Netflix, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -196,4 +196,14 @@ class RefIntHashMapSuite extends FunSuite {
     assert(igraph.totalSize() <= 500000)
   }
 
+  test("negative absolute value") {
+    val s = new RefIntHashMap[RefIntHashMapSuite.MinHash]()
+    assert(s.get(new RefIntHashMapSuite.MinHash, 0) === 0)
+  }
+}
+
+object RefIntHashMapSuite {
+  class MinHash {
+    override def hashCode: Int = Integer.MIN_VALUE
+  }
 }

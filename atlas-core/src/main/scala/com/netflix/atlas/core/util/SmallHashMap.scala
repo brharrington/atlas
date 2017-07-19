@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Netflix, Inc.
+ * Copyright 2014-2017 Netflix, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,18 +16,18 @@
 package com.netflix.atlas.core.util
 
 object SmallHashMap {
-  def empty[K <: AnyRef, V <: AnyRef]: SmallHashMap[K, V] = new SmallHashMap[K, V](Array.empty, 0)
+  def empty[K <: Any, V <: Any]: SmallHashMap[K, V] = new SmallHashMap[K, V](Array.empty, 0)
 
-  def apply[K <: AnyRef, V <: AnyRef](ts: (K, V)*): SmallHashMap[K, V] = {
+  def apply[K <: Any, V <: Any](ts: (K, V)*): SmallHashMap[K, V] = {
     apply(ts.size, ts.iterator)
   }
 
-  def apply[K <: AnyRef, V <: AnyRef](ts: Iterable[(K, V)]): SmallHashMap[K, V] = {
+  def apply[K <: Any, V <: Any](ts: Iterable[(K, V)]): SmallHashMap[K, V] = {
     val seq = ts.toSeq
     apply(seq.size, seq.iterator)
   }
 
-  def apply[K <: AnyRef, V <: AnyRef](length: Int, iter: Iterator[(K, V)]): SmallHashMap[K, V] = {
+  def apply[K <: Any, V <: Any](length: Int, iter: Iterator[(K, V)]): SmallHashMap[K, V] = {
     val b = new Builder[K, V](length)
     while (iter.hasNext) {
       val t = iter.next()
@@ -36,14 +36,14 @@ object SmallHashMap {
     b.result
   }
 
-  class Builder[K <: AnyRef, V <: AnyRef](size: Int) {
-    private val buf = new Array[AnyRef](size * 2)
+  class Builder[K <: Any, V <: Any](size: Int) {
+    private val buf = new Array[Any](size * 2)
     private var actualSize = 0
 
     def +=(pair: (K, V)): Unit = add(pair._1, pair._2)
 
     def add(k: K, v: V) {
-      val pos = math.abs(k.hashCode) % size
+      val pos = Hash.absOrZero(k.hashCode) % size
       var i = pos
       var ki = buf(i * 2)
       var keq = (ki == k)
@@ -97,7 +97,7 @@ object SmallHashMap {
     }
   }
 
-  class EntryIterator[K <: AnyRef, V <: AnyRef](map: SmallHashMap[K, V]) extends Iterator[(K, V)] {
+  class EntryIterator[K <: Any, V <: Any](map: SmallHashMap[K, V]) extends Iterator[(K, V)] {
     private final val len = map.data.length
     var pos = 0
     skipEmptyEntries()
@@ -142,16 +142,16 @@ object SmallHashMap {
  * @param data        array with the items
  * @param dataLength  number of pairs contained within the array starting at index 0.
  */
-final class SmallHashMap[K <: AnyRef, V <: AnyRef] private (val data: Array[AnyRef], dataLength: Int)
+final class SmallHashMap[K <: Any, V <: Any] private (val data: Array[Any], dataLength: Int)
     extends scala.collection.immutable.Map[K, V] {
 
   require(data.length % 2 == 0)
 
   private[this] var cachedHashCode: Int = 0
 
-  private def hash(k: AnyRef): Int = {
+  private def hash(k: Any): Int = {
     val capacity = data.length / 2
-    math.abs(k.hashCode) % capacity
+    Hash.absOrZero(k.hashCode) % capacity
   }
 
   def getOrNull(key: K): V = {
@@ -259,12 +259,19 @@ final class SmallHashMap[K <: AnyRef, V <: AnyRef] private (val data: Array[AnyR
     total.toDouble / dataLength
   }
 
-  def +[B1 >: V](kv: (K, B1)): collection.immutable.Map[K, B1] = {
-    Map(toSeq: _*) + kv
+  def +[V1 >: V](kv: (K, V1)): collection.immutable.Map[K, V1] = {
+    val b = new SmallHashMap.Builder[K, V1](size + 1)
+    foreachItem(b.add)
+    b.add(kv._1, kv._2)
+    b.result
   }
 
-  def -(k: K): collection.immutable.Map[K, V] = {
-    Map(toSeq: _*) - k
+  def -(key: K): collection.immutable.Map[K, V] = {
+    val b = new SmallHashMap.Builder[K, V](size - 1)
+    foreachItem { (k, v) =>
+      if (key != k) b.add(k, v)
+    }
+    b.result
   }
 
   def ++(m: Map[K, V]): collection.immutable.Map[K, V] = {
@@ -350,27 +357,26 @@ final class SmallHashMap[K <: AnyRef, V <: AnyRef] private (val data: Array[AnyR
     while (i < data.length) {
       val k1 = data(i).asInstanceOf[K]
       val k2 = m.data(i).asInstanceOf[K]
-      if (k1 == null && k1 != k2) {
-        val v1 = getOrNull(k2)
-        val v2 = m.data(i + 1)
-        if (v1 != v2) return false
-      }
-
-      if (k2 == null && k1 != k2) {
-        val v1 = data(i + 1)
-        val v2 = m.getOrNull(k1)
-        if (v1 != v2) return false
-      }
 
       if (k1 == k2) {
         val v1 = data(i + 1)
         val v2 = m.data(i + 1)
         if (v1 != v2) return false
+      } else {
+        if (!keyEquals(m, k1) || !keyEquals(m, k2)) return false
       }
 
       i += 2
     }
     true
+  }
+
+  private def keyEquals(m: SmallHashMap[K, V], k: K): Boolean = {
+    if (k == null) true else {
+      val v1 = getOrNull(k)
+      val v2 = m.getOrNull(k)
+      v1 == v2
+    }
   }
 
   /** This is here to allow for testing and benchmarks. Should note be used otherwise. */

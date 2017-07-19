@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016 Netflix, Inc.
+ * Copyright 2014-2017 Netflix, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -105,5 +105,10 @@ class IntHashSetSuite extends FunSuite {
 
     // Sanity check size is < 110kb
     assert(igraph.totalSize() <= 110000)
+  }
+
+  test("negative absolute value") {
+    val s = new IntHashSet(-1, 10)
+    s.add(Integer.MIN_VALUE)
   }
 }
