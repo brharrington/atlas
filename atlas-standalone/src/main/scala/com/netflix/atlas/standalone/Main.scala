@@ -58,7 +58,7 @@ object Main extends StrictLogging {
 
   def main(args: Array[String]): Unit = {
     try {
-      loadAdditionalConfigFiles(args)
+      loadAdditionalConfigFiles(if (args.nonEmpty) args else Array("conf/memory.conf"))
       start()
       guice.addShutdownHook()
     } catch {
@@ -79,6 +79,7 @@ object Main extends StrictLogging {
 
     val modules = GuiceHelper.getModulesUsingServiceLoader
     modules.add(configModule)
+    modules.add(Issue629Service.newGuiceModule)
 
     guice = new GuiceHelper
     guice.start(modules)
