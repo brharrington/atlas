@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import com.netflix.atlas.core.index.QueryIndex
 import com.netflix.frigga.Names
+import com.typesafe.scalalogging.StrictLogging
 
 import scala.collection.JavaConverters._
 
@@ -34,7 +35,7 @@ import scala.collection.JavaConverters._
   * - subscribe/unsubscribe: informs the manager that a given stream should receive or stop
   *   receiving data for a given expression.
   */
-class SubscriptionManager[T] {
+class SubscriptionManager[T] extends StrictLogging {
 
   import SubscriptionManager._
 
@@ -67,6 +68,7 @@ class SubscriptionManager[T] {
     * access the concurrent map without synchronization.
     */
   private def addHandler(subId: String, handler: T): Unit = {
+    logger.info(s"adding handler for $subId")
     subHandlers.synchronized {
       val handlers = subHandlers.computeIfAbsent(subId, _ => new ConcurrentSet[T])
       handlers.add(handler)
