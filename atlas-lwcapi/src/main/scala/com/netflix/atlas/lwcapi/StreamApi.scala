@@ -122,7 +122,7 @@ class StreamApi @Inject()(
     // Send initial setup messages
     queue.offer(SSEHello(streamId, instanceId))
     queue.offer(SSEStatistics(0))
-    sm.register(streamId, queue)
+    sm.register(streamId, new QueueHandler(streamId, queue))
     splits.foreach {
       case (exprMeta, subscriptions) =>
         subscriptions.foreach(s => sm.subscribe(streamId, s))

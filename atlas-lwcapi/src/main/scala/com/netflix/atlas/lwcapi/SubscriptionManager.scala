@@ -68,7 +68,7 @@ class SubscriptionManager[T] extends StrictLogging {
     * access the concurrent map without synchronization.
     */
   private def addHandler(subId: String, handler: T): Unit = {
-    logger.info(s"adding handler for $subId")
+    logger.debug(s"adding handler for $subId: $handler")
     subHandlers.synchronized {
       val handlers = subHandlers.computeIfAbsent(subId, _ => new ConcurrentSet[T])
       handlers.add(handler)
@@ -81,6 +81,7 @@ class SubscriptionManager[T] extends StrictLogging {
     * new handlers to the set.
     */
   private def removeHandler(subId: String, handler: T): Unit = {
+    logger.debug(s"removing handler for $subId: $handler")
     val handlers = subHandlers.get(subId)
     if (handlers != null) {
       handlers.remove(handler)
@@ -96,6 +97,7 @@ class SubscriptionManager[T] extends StrictLogging {
     * list of handlers that should be called for a given subscription.
     */
   def register(streamId: String, handler: T): Unit = {
+    logger.debug(s"registering $streamId")
     registrations.put(streamId, new StreamInfo[T](handler))
     queryListChanged = true
   }
@@ -106,6 +108,7 @@ class SubscriptionManager[T] extends StrictLogging {
     * removed.
     */
   def unregister(streamId: String): Option[T] = {
+    logger.debug(s"unregistering $streamId")
     val result = Option(registrations.remove(streamId)).map { info =>
       info.subscriptions.foreach { sub =>
         removeHandler(sub.metadata.id, info.handler)
@@ -135,8 +138,10 @@ class SubscriptionManager[T] extends StrictLogging {
     * Start sending data for the subscription to the given stream id.
     */
   def subscribe(streamId: String, subs: List[Subscription]): T = {
+    logger.debug(s"updating subscriptions for $streamId")
     val info = getInfo(streamId)
     subs.foreach { sub =>
+      logger.debug(s"subscribing $streamId to $sub")
       info.subs.put(sub.metadata.id, sub)
       addHandler(sub.metadata.id, info.handler)
     }
@@ -148,6 +153,7 @@ class SubscriptionManager[T] extends StrictLogging {
     * Stop sending data for the subscription to the given stream id.
     */
   def unsubscribe(streamId: String, subId: String): Unit = {
+    logger.debug(s"unsubscribing $streamId from $subId")
     val info = getInfo(streamId)
     info.subs.remove(subId)
     removeHandler(subId, info.handler)
@@ -200,6 +206,7 @@ class SubscriptionManager[T] extends StrictLogging {
   }
 
   def clear(): Unit = {
+    logger.debug("clearing all subscriptions")
     registrations.clear()
     queryListChanged = true
     regenerateQueryIndex()
