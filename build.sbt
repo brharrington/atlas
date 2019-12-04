@@ -34,6 +34,9 @@ lazy val `atlas-akka` = project
     Dependencies.spectatorIpc,
     Dependencies.akkaHttp,
     Dependencies.typesafeConfig,
+      Dependencies.log4jApi,
+      Dependencies.log4jCore,
+      Dependencies.log4jSlf4j,
     Dependencies.akkaHttpTestkit % "test",
     Dependencies.akkaStreamTestkit % "test",
     Dependencies.akkaTestkit % "test"
