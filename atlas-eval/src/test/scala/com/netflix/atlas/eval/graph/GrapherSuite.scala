@@ -25,9 +25,9 @@ import com.netflix.atlas.core.util.Strings
 import com.netflix.atlas.json.Json
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 
-class GrapherSuite extends FunSuite with BeforeAndAfterAll {
+class GrapherSuite extends AnyFunSuite with BeforeAndAfterAll {
 
   private val bless = false
 
@@ -382,6 +382,30 @@ class GrapherSuite extends FunSuite with BeforeAndAfterAll {
     "/api/v1/graph?e=2012-01-01T00:00" +
     "&q=name,sps,:eq,nf.cluster,nccp-silver,:lt,:and,(,nf.cluster,),:by" +
     "&title=$name+$nf.cluster&axis_per_line=1"
+  }
+
+  imageTest("using dark24 palette") {
+    "/api/v1/graph?e=2012-01-01T00:00" +
+    "&q=name,sps,:eq,(,nf.cluster,),:by,$nf.cluster,:legend" +
+    "&palette=dark24"
+  }
+
+  imageTest("using light24 palette") {
+    "/api/v1/graph?e=2012-01-01T00:00" +
+    "&q=name,sps,:eq,(,nf.cluster,),:by,$nf.cluster,:legend" +
+    "&palette=light24"
+  }
+
+  imageTest("using dark theme") {
+    "/api/v1/graph?e=2012-01-01T00:00" +
+    "&q=name,sps,:eq,(,nf.cluster,),:by,$nf.cluster,:legend" +
+    "&theme=dark"
+  }
+
+  imageTest("using dark theme with multi-Y") {
+    "/api/v1/graph?e=2012-01-01T00:00" +
+    "&q=name,sps,:eq,(,nf.cluster,),:by,$nf.cluster,:legend,42,1,:axis" +
+    "&theme=dark"
   }
 
   def renderTest(name: String)(uri: => String): Unit = {

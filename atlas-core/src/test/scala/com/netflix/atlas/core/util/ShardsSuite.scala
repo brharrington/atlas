@@ -17,9 +17,9 @@ package com.netflix.atlas.core.util
 
 import java.util.UUID
 
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 
-class ShardsSuite extends FunSuite {
+class ShardsSuite extends AnyFunSuite {
 
   private def createGroups(n: Int, sz: Int): List[Shards.Group[Int]] = {
     val groups = (0 until n).map { i =>
@@ -127,6 +127,17 @@ class ShardsSuite extends FunSuite {
     expected.indices.foreach { i =>
       assert(expected(i) - counts.get(i, -1) <= 1)
     }
+  }
+
+  test("empty group") {
+    val groups = List(
+      Shards.Group("a", Array("0", "1")),
+      Shards.Group("b", Array.empty[String]),
+      Shards.Group("c", Array("6", "7"))
+    )
+
+    val mapper = Shards.mapper(groups)
+    assert(mapper.instanceForIndex(1) === null)
   }
 
   test("local mapper containsIndex") {
