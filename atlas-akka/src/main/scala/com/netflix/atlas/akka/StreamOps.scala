@@ -42,10 +42,12 @@ import akka.stream.stage.GraphStageLogic
 import akka.stream.stage.GraphStageWithMaterializedValue
 import akka.stream.stage.InHandler
 import akka.stream.stage.OutHandler
+import com.netflix.spectator.api.NoopRegistry
 import com.netflix.spectator.api.Registry
 import com.netflix.spectator.api.Timer
 import com.typesafe.scalalogging.StrictLogging
 
+import scala.collection.mutable
 import scala.concurrent.Future
 import scala.util.Failure
 import scala.util.Success
@@ -155,7 +157,8 @@ object StreamOps extends StrictLogging {
     *     Source that emits values offered to the queue.
     */
   def blockingQueue[T](registry: Registry, id: String, size: Int): Source[T, SourceQueue[T]] = {
-    Source.fromGraph(new QueueSource[T](registry, id, size))
+    val queueSupplier = () => new SourceQueue[T](registry, id, new ArrayBlockingQueue[T](size))
+    Source.fromGraph(new QueueSource[T](queueSupplier))
   }
 
   /** Bounded queue for submitting elements to a stream. */
@@ -225,7 +228,7 @@ object StreamOps extends StrictLogging {
     def isDone: Boolean = completed && queue.isEmpty
   }
 
-  private class QueueSource[T](registry: Registry, id: String, size: Int)
+  private class QueueSource[T](queueSupplier: () => SourceQueue[T])
       extends GraphStageWithMaterializedValue[SourceShape[T], SourceQueue[T]] {
 
     private val out = Outlet[T]("QueueSource")
@@ -235,7 +238,7 @@ object StreamOps extends StrictLogging {
     override def createLogicAndMaterializedValue(
       attrs: Attributes
     ): (GraphStageLogic, SourceQueue[T]) = {
-      val queue = new SourceQueue[T](registry, id, new ArrayBlockingQueue[T](size))
+      val queue = queueSupplier()
       val logic = new GraphStageLogic(shape) with OutHandler {
         override def onPull(): Unit = {
           if (queue.isDone) {
@@ -374,5 +377,136 @@ object StreamOps extends StrictLogging {
     f: (V1, Materializer) => Graph[SourceShape[V2], M]
   ): Flow[V1, V2, NotUsed] = {
     map(f).flatMapConcat(src => src)
+  }
+
+  /**
+    * Maintains a sub-flow for each member of a cluster. The set of sub-flows can change
+    * dynamically based on the members present in the input cluster definition.
+    *
+    * ```
+    * [C] ---> f(C) ---> [I1] -> client(M1) -> [O1] --+---> [O]
+    *               |                                 |
+    *               |--> [I2] -> client(M2) -> [O2] --|
+    *               |                                 |
+    *               +--> [I3] -> client(M3) -> [O3] --+
+    * ```
+    *
+    * TODO, queueing and backpressure
+    * Use-cases
+    * - subscribe to all members of a cluster
+    * - publish to all members of a cluster
+    *
+    * @param f
+    *     Function that converts an input representing a cluster and associated data into
+    *     a map to a key for a member and the data that should be forwarded to that member.
+    *     The full set of members should be present with each message or the sub-flow for
+    *     missing members will be shutdown.
+    * @param client
+    *     Function that creates a sub-flow for a member of a cluster. The input data for
+    *     the member will be emitted to the sub-flow. If a failure occurs for the client
+    *     flow, then it will be recreated continually until the member is removed from the
+    *     cluster definition.
+    * @tparam C
+    *     Represents a cluster and associated input data.
+    * @tparam M
+    *     Key identifying a member of a cluster.
+    * @tparam I
+    *     Input data to forward to the sub-flow for a member.
+    * @tparam O
+    *     Output data that will be flattened after the mapping.
+    * @return
+    *     Overall flow that performs the grouping and merges the output data from the
+    *     cluster.
+    */
+  def clusterGroupBy[C <: AnyRef, M <: AnyRef, I <: AnyRef, O <: AnyRef](
+    f: C => Map[M, I],
+    client: M => Flow[I, O, NotUsed]
+  ): Flow[C, O, NotUsed] = {
+
+    Flow[C]
+      .via(new ClusterGroupBy[C, M, I, O](f, client))
+      .flatMapMerge(Int.MaxValue, sources => Source(sources))
+      .flatMapMerge(Int.MaxValue, source => source)
+  }
+
+  private final class ClusterGroupBy[C <: AnyRef, M <: AnyRef, I <: AnyRef, O <: AnyRef](
+    f: C => Map[M, I],
+    client: M => Flow[I, O, NotUsed]
+  ) extends GraphStage[FlowShape[C, List[Source[O, NotUsed]]]] {
+
+    private val in = Inlet[C]("ClusterGroupBy.in")
+    private val out = Outlet[List[Source[O, NotUsed]]]("ClusterGroupBy.out")
+
+    override def shape: FlowShape[C, List[Source[O, NotUsed]]] = FlowShape(in, out)
+
+    override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = {
+      new GraphStageLogic(shape) with InHandler with OutHandler {
+
+        private val registry = new NoopRegistry
+        private val membersSources = mutable.AnyRefMap.empty[M, MemberQueue[I]]
+
+        override def onPush(): Unit = {
+          val cluster = grab(in)
+          val members = f(cluster)
+          val keys = members.keySet
+          val current = membersSources.keySet
+
+          val removed = current -- keys
+          if (removed.nonEmpty) {
+            logger.debug(s"members removed: $removed")
+          }
+          removed.foreach { m =>
+            membersSources.remove(m).foreach { ref =>
+              logger.debug(s"stopping $m")
+              ref.queue.complete()
+            }
+          }
+
+          val added = keys -- current
+          if (added.nonEmpty) {
+            logger.debug(s"members added: $added")
+          }
+          val sources = added
+            .toList
+            .map { m =>
+              // TODO: restart handling etc
+              val queue = new SourceQueue[I](registry, "_", new ArrayBlockingQueue[I](100))
+              membersSources += m -> new MemberQueue(queue, null.asInstanceOf[I])
+              Source
+                .fromGraph(new QueueSource[I](() => queue))
+                .mapMaterializedValue(_ => NotUsed)
+                .via(client(m))
+            }
+
+          // Push down the value for all entries
+          members.foreachEntry { (k, v) =>
+            membersSources(k).offer(v)
+          }
+
+          push(out, sources)
+        }
+
+        override def onPull(): Unit = {
+          pull(in)
+        }
+
+        override def onUpstreamFinish(): Unit = {
+          membersSources.values.foreach(_.queue.complete())
+          super.onUpstreamFinish()
+        }
+
+        setHandlers(in, out, this)
+      }
+    }
+  }
+
+  private final class MemberQueue[V](val queue: SourceQueue[V], var last: V) {
+    def offer(value: V): Unit = {
+      if (value != last) {
+        logger.trace(s"previous = [$last], current = [$value]")
+        queue.offer(value)
+        last = value
+      }
+    }
   }
 }

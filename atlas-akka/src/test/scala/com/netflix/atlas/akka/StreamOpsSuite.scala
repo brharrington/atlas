@@ -23,11 +23,14 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.Materializer
 import akka.stream.OverflowStrategy
+import akka.stream.ThrottleMode
+import akka.stream.scaladsl.Flow
 import akka.stream.scaladsl.Keep
 import akka.stream.scaladsl.Sink
 import akka.stream.scaladsl.Source
 import com.netflix.spectator.api.DefaultRegistry
 import com.netflix.spectator.api.ManualClock
+import com.netflix.spectator.api.NoopRegistry
 import com.netflix.spectator.api.Registry
 import com.netflix.spectator.api.Utils
 import org.scalatest.funsuite.AnyFunSuite
@@ -235,5 +238,40 @@ class StreamOpsSuite extends AnyFunSuite {
 
     val c = registry.counter("akka.stream.exceptions", "error", "ArithmeticException")
     assert(c.count() === 1)
+  }
+
+  private def dataStream(k: String): Flow[String, String, NotUsed] = {
+    Flow[String]
+      .zipWithIndex
+      .map {
+        //case (h, i) if h == "c" && i == 3 =>
+        //  throw new RuntimeException("failure")
+        case t => s"$k ==> $t"
+      }
+  }
+
+  test("foo") {
+    implicit val system = ActorSystem("test")
+    implicit val materializer = StreamOps.materializer(system, new NoopRegistry)
+
+    val hostsSrc = Source(
+      List(
+        List("a", "b", "c"),
+        List("a", "bb", "c"),
+        List("a", "c"),
+        List("a", "c", "d"),
+        List("a", "c", "e"),
+        List("a", "e", "f"),
+        List("b", "e", "f")
+      )
+    )
+
+    val future = hostsSrc
+      //.throttle(1, 5.seconds, 1, ThrottleMode.Shaping)
+      .via(StreamOps.clusterGroupBy(_.map(v => v.substring(0, 1) -> v).toMap, dataStream))
+      .runWith(Sink.seq[String])
+
+    val seq = Await.result(future, Duration.Inf)
+    seq.foreach(println)
   }
 }
