@@ -28,6 +28,7 @@ import akka.stream.scaladsl.Flow
 import akka.stream.scaladsl.Keep
 import akka.stream.scaladsl.Sink
 import akka.stream.scaladsl.Source
+import com.netflix.atlas.akka.ClusterOps.GroupByMessage
 import com.netflix.spectator.api.DefaultRegistry
 import com.netflix.spectator.api.ManualClock
 import com.netflix.spectator.api.NoopRegistry
@@ -240,14 +241,45 @@ class StreamOpsSuite extends AnyFunSuite {
     assert(c.count() === 1)
   }
 
-  private def dataStream(k: String): Flow[String, String, NotUsed] = {
-    Flow[String]
-      .zipWithIndex
+  private def client(k: String): Flow[String, String, NotUsed] = {
+    Flow[String].zipWithIndex
       .map {
         //case (h, i) if h == "c" && i == 3 =>
         //  throw new RuntimeException("failure")
-        case t => s"$k ==> $t"
+        t =>
+          s"$k ==> $t"
       }
+  }
+
+  test("clusterGroupBy: ") {
+    /*implicit val system = ActorSystem("test")
+    implicit val materializer = StreamOps.materializer(system, new NoopRegistry)
+
+    val hostsSrc = Source(
+      List(
+        List("a", "b", "c"),
+        List("a", "bb", "c"),
+        List("aa", "b", "c"),
+        List("a", "c"),
+        List("a", "c", "d"),
+        List("a", "c", "e"),
+        List("a", "e", "f"),
+        List("b", "e", "f")
+      )
+    )
+
+    val context = ClusterOps.GroupByContext(client)
+    val future = hostsSrc
+      .flatMapConcat { vs =>
+        val data = ClusterOps.Data(vs.map(v => v.substring(0, 1) -> v).toMap)
+        val cluster = ClusterOps.Cluster(data.data.keySet)
+        Source(List(cluster, data))
+      }
+      .via(ClusterOps.groupBy(client))
+      .runWith(Sink.seq[String])
+
+    val seq = Await.result(future, Duration.Inf)
+    seq.foreach(println)*/
   }
 
   test("foo") {
@@ -258,6 +290,7 @@ class StreamOpsSuite extends AnyFunSuite {
       List(
         List("a", "b", "c"),
         List("a", "bb", "c"),
+        List("aa", "b", "c"),
         List("a", "c"),
         List("a", "c", "d"),
         List("a", "c", "e"),
@@ -267,8 +300,8 @@ class StreamOpsSuite extends AnyFunSuite {
     )
 
     val future = hostsSrc
-      //.throttle(1, 5.seconds, 1, ThrottleMode.Shaping)
-      .via(StreamOps.clusterGroupBy(_.map(v => v.substring(0, 1) -> v).toMap, dataStream))
+    //.throttle(1, 5.seconds, 1, ThrottleMode.Shaping)
+      .via(StreamOps.clusterGroupBy(_.map(v => v.substring(0, 1) -> v).toMap, client))
       .runWith(Sink.seq[String])
 
     val seq = Await.result(future, Duration.Inf)

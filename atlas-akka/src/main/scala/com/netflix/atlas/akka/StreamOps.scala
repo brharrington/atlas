@@ -228,7 +228,7 @@ object StreamOps extends StrictLogging {
     def isDone: Boolean = completed && queue.isEmpty
   }
 
-  private class QueueSource[T](queueSupplier: () => SourceQueue[T])
+  private[akka] final class QueueSource[T](queueSupplier: () => SourceQueue[T])
       extends GraphStageWithMaterializedValue[SourceShape[T], SourceQueue[T]] {
 
     private val out = Outlet[T]("QueueSource")
@@ -466,8 +466,7 @@ object StreamOps extends StrictLogging {
           if (added.nonEmpty) {
             logger.debug(s"members added: $added")
           }
-          val sources = added
-            .toList
+          val sources = added.toList
             .map { m =>
               // TODO: restart handling etc
               val queue = new SourceQueue[I](registry, "_", new ArrayBlockingQueue[I](100))
@@ -501,6 +500,7 @@ object StreamOps extends StrictLogging {
   }
 
   private final class MemberQueue[V](val queue: SourceQueue[V], var last: V) {
+
     def offer(value: V): Unit = {
       if (value != last) {
         logger.trace(s"previous = [$last], current = [$value]")
