@@ -49,6 +49,7 @@ lazy val `atlas-core` = project
     Dependencies.caffeine,
     Dependencies.iepNflxEnv,
     Dependencies.roaringBitmap,
+    "org.apache.datasketches" % "datasketches-java" % "1.3.0-incubating",
     Dependencies.equalsVerifier % "test",
     Dependencies.jol % "test"
   ))
