@@ -60,9 +60,9 @@ private[chart] object JsonCodec {
 
   def encode(config: GraphDef): String = {
     Streams.string { w =>
-      val gen = factory.createGenerator(w)
-      writeGraphDef(gen, config)
-      gen.close()
+      Using.resource(factory.createGenerator(w)) { gen =>
+        writeGraphDef(gen, config)
+      }
     }
   }
 
