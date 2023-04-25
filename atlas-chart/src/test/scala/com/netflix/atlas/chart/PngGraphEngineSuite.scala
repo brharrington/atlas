@@ -150,6 +150,12 @@ abstract class PngGraphEngineSuite extends FunSuite {
     }
   }
 
+  def loadV2(resource: String): GraphDef = {
+    Using.resource(Streams.resource(resource)) { in =>
+      JsonCodec.decode(in)
+    }
+  }
+
   def checkImpl(name: String, graphDef: GraphDef): Unit = {
     val json = JsonCodec.encode(graphDef)
     assertEquals(graphDef.normalize, JsonCodec.decode(json).normalize)
@@ -720,6 +726,10 @@ abstract class PngGraphEngineSuite extends FunSuite {
     lines(s"vision_${vt.name}", (0 until 9).map(_ => 100.0).toSeq, f)
   }
 
+  test("heatmap1") {
+    val graphDef = loadV2(s"$dataDir/heatmap1.json")
+    check("heatmap1.png", graphDef)
+  }
 }
 
 case class GraphData(
