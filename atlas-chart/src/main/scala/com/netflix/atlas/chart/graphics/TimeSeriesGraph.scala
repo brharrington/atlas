@@ -21,6 +21,8 @@ import com.netflix.atlas.chart.GraphConstants
 import com.netflix.atlas.chart.model.GraphDef
 import com.netflix.atlas.chart.model.LineStyle
 
+import java.awt.Color
+
 /**
   * Draws a time series graph.
   */
@@ -110,17 +112,22 @@ case class TimeSeriesGraph(graphDef: GraphDef) extends Element with FixedHeight 
     clip(g, x1 + leftOffset, y1, x2 - rightOffset, chartEnd + 1)
     graphDef.plots.zip(yaxes).foreach {
       case (plot, axis) =>
+        val heatmapData = plot.lines.filter(_.lineStyle == LineStyle.HEATMAP).map(_.data.data)
+        if (heatmapData.nonEmpty) {
+          val style = Style(color = Color.RED, stroke = new BasicStroke(1.0f))
+          val heatmap = TimeSeriesHeatmap(style, heatmapData, timeAxis, axis)
+          heatmap.draw(g, x1 + leftOffset, y1, x2 - rightOffset, chartEnd)
+        }
+
         val offsets = TimeSeriesStack.Offsets(timeAxis)
-        plot.lines.foreach { line =>
+        plot.lines.filter(_.lineStyle != LineStyle.HEATMAP).foreach { line =>
           val style = Style(color = line.color, stroke = new BasicStroke(line.lineWidth))
           val lineElement = line.lineStyle match {
-            case LineStyle.LINE  => TimeSeriesLine(style, line.data.data, timeAxis, axis)
-            case LineStyle.AREA  => TimeSeriesArea(style, line.data.data, timeAxis, axis)
-            case LineStyle.VSPAN => TimeSeriesSpan(style, line.data.data, timeAxis)
-            case LineStyle.STACK => TimeSeriesStack(style, line.data.data, timeAxis, axis, offsets)
-            case LineStyle.HEATMAP =>
-              // no-op for now.
-              new Element { def draw(g: Graphics2D, x1: Int, y1: Int, x2: Int, y2: Int) = () }
+            case LineStyle.LINE    => TimeSeriesLine(style, line.data.data, timeAxis, axis)
+            case LineStyle.AREA    => TimeSeriesArea(style, line.data.data, timeAxis, axis)
+            case LineStyle.VSPAN   => TimeSeriesSpan(style, line.data.data, timeAxis)
+            case LineStyle.STACK   => TimeSeriesStack(style, line.data.data, timeAxis, axis, offsets)
+            case LineStyle.HEATMAP => throw new IllegalStateException()
           }
 
           lineElement.draw(g, x1 + leftOffset, y1, x2 - rightOffset, chartEnd)
