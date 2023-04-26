@@ -21,15 +21,15 @@ import com.netflix.atlas.chart.model.PlotBound.AutoStyle
   * A configuration used to compute and optionally plot a heatmap.
   *
   * @param colorScale
-  *   The color scale to use for counts within a cell.
+  *     The color scale to use for counts within a cell.
   * @param upper
-  *   An optional upper boundary for the cell count.
+  *     An optional upper boundary for the cell count.
   * @param lower
-  *   An optional lower boundary for the cell count.
+  *     An optional lower boundary for the cell count.
   * @param palette
-  *   An optional palette to use for the heatmap
+  *     An optional palette to use for the heatmap
   * @param legend
-  *   A string to use for the legend.
+  *     A string to use for the legend.
   */
 case class HeatmapDef(
   colorScale: Scale = Scale.LINEAR,

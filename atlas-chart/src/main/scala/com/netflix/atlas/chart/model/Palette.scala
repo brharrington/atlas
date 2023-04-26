@@ -82,7 +82,7 @@ case class Palette(name: String, colorArray: ArraySeq[Color]) {
 
 object Palette {
 
-  val default = fromArray(
+  val default: Palette = fromArray(
     "default",
     Array[Color](
       Color.RED,
@@ -155,6 +155,20 @@ object Palette {
 
   def singleColor(c: Color): Palette = {
     Palette("%08X".format(c.getRGB), ArraySeq(c))
+  }
+
+  def gradient(color: Color): Palette = {
+    var alpha = color.getAlpha
+    val delta = if (alpha == 0 || alpha >= 255) 255 / 5 else alpha
+    val colors = new Array[Color](255 / delta)
+    alpha = 255
+    var i = colors.length - 1
+    while (i >= 0) {
+      colors(i) = new Color(color.getRed, color.getGreen, color.getBlue, alpha)
+      alpha -= delta
+      i -= 1
+    }
+    Palette("gradient", ArraySeq.unsafeWrapArray(colors))
   }
 
   def brighter(c: Color, n: Int): Palette = {

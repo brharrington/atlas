@@ -15,8 +15,9 @@
  */
 package com.netflix.atlas.chart.model
 
-import java.awt.Color
+import com.netflix.atlas.chart.graphics.Heatmap
 
+import java.awt.Color
 import com.netflix.atlas.chart.graphics.Theme
 import com.netflix.atlas.chart.model.PlotBound.AutoStyle
 import com.netflix.atlas.chart.model.PlotBound.Explicit
@@ -67,13 +68,22 @@ case class PlotDef(
     else {
       val step = dataLines.head.data.data.step
       val (regular, stacked) = dataLines
-        .filter(_.lineStyle != LineStyle.VSPAN)
+        .filter(line => line.lineStyle != LineStyle.VSPAN && !Heatmap.isPercentileHeatmap(line))
         .partition(_.lineStyle != LineStyle.STACK)
 
       var max = -JDouble.MAX_VALUE
       var min = JDouble.MAX_VALUE
       var posSum = 0.0
       var negSum = 0.0
+
+      dataLines
+        .filter(Heatmap.isPercentileHeatmap)
+        .flatMap(line => Heatmap.percentileBucketRange(line.data.tags))
+        .foreach {
+          case (mn, mx) =>
+            min = math.min(min, mn)
+            max = math.max(max, mx)
+        }
 
       var t = start
       while (t < end) {

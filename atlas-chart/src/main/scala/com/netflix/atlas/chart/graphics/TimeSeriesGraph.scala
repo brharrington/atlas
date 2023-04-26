@@ -19,9 +19,8 @@ import java.awt.BasicStroke
 import java.awt.Graphics2D
 import com.netflix.atlas.chart.GraphConstants
 import com.netflix.atlas.chart.model.GraphDef
+import com.netflix.atlas.chart.model.HeatmapDef
 import com.netflix.atlas.chart.model.LineStyle
-
-import java.awt.Color
 
 /**
   * Draws a time series graph.
@@ -112,11 +111,12 @@ case class TimeSeriesGraph(graphDef: GraphDef) extends Element with FixedHeight 
     clip(g, x1 + leftOffset, y1, x2 - rightOffset, chartEnd + 1)
     graphDef.plots.zip(yaxes).foreach {
       case (plot, axis) =>
-        val heatmapData = plot.lines.filter(_.lineStyle == LineStyle.HEATMAP).map(_.data.data)
+        val heatmapData = plot.lines.filter(_.lineStyle == LineStyle.HEATMAP)
         if (heatmapData.nonEmpty) {
-          val style = Style(color = Color.RED, stroke = new BasicStroke(1.0f))
-          val heatmap = TimeSeriesHeatmap(style, heatmapData, timeAxis, axis)
-          heatmap.draw(g, x1 + leftOffset, y1, x2 - rightOffset, chartEnd)
+          val settings = plot.heatmapDef.getOrElse(HeatmapDef())
+          val heatmap = Heatmap(heatmapData, timeAxis, axis, y1, chartEnd)
+          val element = TimeSeriesHeatmap(settings, heatmap)
+          element.draw(g, x1 + leftOffset, y1, x2 - rightOffset, chartEnd)
         }
 
         val offsets = TimeSeriesStack.Offsets(timeAxis)

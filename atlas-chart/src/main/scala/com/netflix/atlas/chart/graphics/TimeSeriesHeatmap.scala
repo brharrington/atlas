@@ -15,9 +15,11 @@
  */
 package com.netflix.atlas.chart.graphics
 
-import java.awt.Graphics2D
+import com.netflix.atlas.chart.model.HeatmapDef
+import com.netflix.atlas.chart.model.Palette
 
-import com.netflix.atlas.core.model.TimeSeq
+import java.awt.Color
+import java.awt.Graphics2D
 
 /**
   * Draws a time series as a stepped line.
@@ -31,72 +33,44 @@ import com.netflix.atlas.core.model.TimeSeq
   * @param yaxis
   *     Axis used to create the Y scale.
   */
-case class TimeSeriesHeatmap(style: Style, data: List[TimeSeq], xaxis: TimeAxis, yaxis: ValueAxis)
+case class TimeSeriesHeatmap(settings: HeatmapDef, heatmap: Heatmap)
   extends Element {
 
-  import TimeSeriesHeatmap._
+  private val palette = Palette.gradient(Color.RED)//settings.palette.getOrElse(Palette.fromResource("reds"))
+
+  private val colorScale = Scales.factory(settings.colorScale)(
+    heatmap.minCount,
+    heatmap.maxCount,
+    palette.colorArray.size,
+    0
+  )
 
   def draw(g: Graphics2D, x1: Int, y1: Int, x2: Int, y2: Int): Unit = {
-    if (data.isEmpty) return
-    style.configure(g)
-    val step = data.head.step
+    val step = heatmap.step
+    val xaxis = heatmap.xaxis
+    val yaxis = heatmap.yaxis
     val xscale = xaxis.scale(x1, x2)
     val yscale = yaxis.scale(y1, y2)
 
-    val ticks = yaxis.ticks(y1, y2).toArray
-    val counts = computeCounts(data, xaxis.start, xaxis.end, step, ticks)
-
-    var t = xaxis.start
+    var t = heatmap.xaxis.start
     while (t < xaxis.end) {
       val px1 = xscale(t - step)
       val px2 = xscale(t)
 
-      val cx = ((t - xaxis.start) / step).toInt
-      var cy = 0
-      while (cy <= ticks.length) {
-        val count = counts(cx)(cy)
-        if (count > 0) {
-          val py1 = if (cy == 0) y1 else yscale(ticks(cy - 1).v)
-          val py2 = if (cy == ticks.length) y2 else yscale(ticks(cy).v)
+      var i = 0
+      while (i < heatmap.numberOfValueBuckets) {
+        val count = heatmap.count(t, i)
+        if (count > 0.0) {
+          val c = palette.colors(colorScale(count))
+          g.setColor(c)
+          val py1 = if (i == 0) y1 else yscale(heatmap.ticks(i - 1).v)
+          val py2 = if (i == heatmap.ticks.length) y2 else yscale(heatmap.ticks(i).v)
           g.fillRect(px1, py2, px2 - px1, py1 - py2)
         }
-        cy += 1
+        i += 1
       }
 
       t += step
     }
-  }
-}
-
-object TimeSeriesHeatmap {
-
-  private def findBucket(ticks: Array[ValueTick], value: Double): Int = {
-    // positive vs negative, limited bounds
-    var i = 0
-    while (i < ticks.length) {
-      if (value < ticks(i).v)
-        return i
-      i += 1
-    }
-    ticks.length
-  }
-
-  private def computeCounts(data: List[TimeSeq], start: Long, end: Long, step: Long, ticks: Array[ValueTick]): Array[Array[Int]] = {
-    val w = ((end - start) / step).toInt
-    val h = ticks.length + 1
-    val counts = Array.fill(w, h)(0)
-    var t = start
-    while (t < end) {
-      val x = ((t - start) / step).toInt
-      data.foreach { ts =>
-        val v = ts(t)
-        if (!v.isNaN) {
-          val y = findBucket(ticks, v)
-          counts(x)(y) += 1
-        }
-      }
-      t += step
-    }
-    counts
   }
 }
