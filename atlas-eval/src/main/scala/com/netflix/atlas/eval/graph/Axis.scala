@@ -67,7 +67,7 @@ case class Axis(
       scale = Scale.fromName(scale.getOrElse("linear")),
       axisColor = if (multiY) data.headOption.map(_.color) else None,
       tickLabelMode = tickLabelMode,
-      heatmapDef = Some(
+      heatmap = Some(
         HeatmapDef(
           heatmapScale.fold[Scale](Scale.LINEAR)(Scale.fromName(_)),
           heatmapUpper.fold[PlotBound](AutoStyle)(v => PlotBound(v)),
