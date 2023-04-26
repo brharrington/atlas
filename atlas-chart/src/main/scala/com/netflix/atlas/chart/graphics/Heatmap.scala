@@ -77,11 +77,11 @@ case class Heatmap(
     var i = 0
     while (i < ticks.length) {
       val cellMax = ticks(i).v
+      counts(i) += cnt * computeWeight(mn, mx, cellMin, cellMax)
       if (cellMax > mx) {
         // Stop early once passed the max of the bucket range
         return
       }
-      counts(i) += cnt * computeWeight(mn, mx, cellMin, cellMax)
       cellMin = cellMax
       i += 1
     }
@@ -106,7 +106,7 @@ case class Heatmap(
             // graph that overlap the range of the percentile bucket
             val (mn, mx) = pctRange.get
             val cnt = v * step / 1000.0
-            updateCounts(mn, mx, cnt, counts(x))
+            if (cnt > 0.0) updateCounts(mn, mx, cnt, counts(x))
           } else {
             // For normal lines, just update the counts based on the position of the value
             val y = findBucket(v)

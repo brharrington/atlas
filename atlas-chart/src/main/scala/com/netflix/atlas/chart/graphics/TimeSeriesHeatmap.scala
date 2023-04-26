@@ -63,8 +63,8 @@ case class TimeSeriesHeatmap(settings: HeatmapDef, heatmap: Heatmap)
         if (count > 0.0) {
           val c = palette.colors(colorScale(count))
           g.setColor(c)
-          val py1 = if (i == 0) y1 else yscale(heatmap.ticks(i - 1).v)
-          val py2 = if (i == heatmap.ticks.length) y2 else yscale(heatmap.ticks(i).v)
+          val py1 = if (i == 0) y2 else yscale(heatmap.ticks(i - 1).v)
+          val py2 = if (i == heatmap.ticks.length) y1 else yscale(heatmap.ticks(i).v)
           g.fillRect(px1, py2, px2 - px1, py1 - py2)
         }
         i += 1

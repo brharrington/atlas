@@ -15,9 +15,11 @@
  */
 package com.netflix.atlas.chart.graphics
 
+import com.netflix.atlas.chart.model.LineDef
+import com.netflix.atlas.chart.model.LineStyle
+
 import java.awt.Font
 import java.awt.Graphics2D
-
 import com.netflix.atlas.chart.model.PlotDef
 
 /**
@@ -49,9 +51,16 @@ case class Legend(
     Text(str, font = bold, alignment = TextAlignment.LEFT, style = Style(headerColor))
   }
 
-  private val entries = plot.data.take(maxEntries).flatMap { data =>
-    List(HorizontalPadding(2), LegendEntry(styles, plot, data, showStats))
-  }
+  private val entries = plot
+    .data
+    .filter {
+      case line: LineDef if line.lineStyle == LineStyle.HEATMAP => false
+      case _                                                    => true
+    }
+    .take(maxEntries)
+    .flatMap { data =>
+      List(HorizontalPadding(2), LegendEntry(styles, plot, data, showStats))
+    }
 
   private val footer =
     if (numEntries <= maxEntries) Nil

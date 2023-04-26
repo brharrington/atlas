@@ -726,9 +726,14 @@ abstract class PngGraphEngineSuite extends FunSuite {
     lines(s"vision_${vt.name}", (0 until 9).map(_ => 100.0).toSeq, f)
   }
 
-  test("heatmap1") {
-    val graphDef = loadV2(s"$dataDir/heatmap1.json")
-    check("heatmap1.png", graphDef)
+  test("heatmap_timer") {
+    val graphDef = loadV2(s"$dataDir/heatmap_timer.json")
+    check("heatmap_timer.png", graphDef)
+  }
+
+  test("heatmap_dist") {
+    val graphDef = loadV2(s"$dataDir/heatmap_dist.json")
+    check("heatmap_dist.png", graphDef)
   }
 }
 

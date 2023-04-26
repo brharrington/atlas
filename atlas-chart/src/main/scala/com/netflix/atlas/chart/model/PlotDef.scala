@@ -21,6 +21,7 @@ import java.awt.Color
 import com.netflix.atlas.chart.graphics.Theme
 import com.netflix.atlas.chart.model.PlotBound.AutoStyle
 import com.netflix.atlas.chart.model.PlotBound.Explicit
+import com.netflix.atlas.core.model.TimeSeq
 
 /**
   * Definition for a plot, i.e., a y-axis and associated data elements.
@@ -78,6 +79,7 @@ case class PlotDef(
 
       dataLines
         .filter(Heatmap.isPercentileHeatmap)
+        .filter(line => hasNonZeroData(start, end, step, line.data.data))
         .flatMap(line => Heatmap.percentileBucketRange(line.data.tags))
         .foreach {
           case (mn, mx) =>
@@ -127,6 +129,17 @@ case class PlotDef(
       max = if (max == -JDouble.MAX_VALUE) 1.0 else max
       finalBounds(hasArea, min, max)
     }
+  }
+
+  private def hasNonZeroData(start: Long, end: Long, step: Long, ts: TimeSeq): Boolean = {
+    var t = start
+    while (t < end) {
+      val v = ts(t)
+      if (!v.isNaN && v != 0.0)
+        return true
+      t += step
+    }
+    false
   }
 
   private[model] def finalBounds(hasArea: Boolean, min: Double, max: Double): (Double, Double) = {
