@@ -15,7 +15,7 @@
  */
 package com.netflix.atlas.chart.model
 
-import com.netflix.atlas.chart.model.PlotBound.AutoStyle
+import com.netflix.atlas.chart.model.PlotBound
 
 /**
   * A configuration used to compute and optionally plot a heatmap.
@@ -33,8 +33,8 @@ import com.netflix.atlas.chart.model.PlotBound.AutoStyle
   */
 case class HeatmapDef(
   colorScale: Scale = Scale.LINEAR,
-  upper: PlotBound = AutoStyle,
-  lower: PlotBound = AutoStyle,
+  upper: PlotBound = PlotBound.AutoData,
+  lower: PlotBound = PlotBound.AutoData,
   palette: Option[Palette] = None,
   legend: Option[String] = None
 )
