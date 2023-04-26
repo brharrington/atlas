@@ -16,9 +16,12 @@
 package com.netflix.atlas.chart.model
 
 import com.netflix.atlas.chart.graphics.Heatmap
+import com.netflix.atlas.chart.graphics.LeftValueAxis
+import com.netflix.atlas.chart.graphics.Style
 
 import java.awt.Color
 import com.netflix.atlas.chart.graphics.Theme
+import com.netflix.atlas.chart.graphics.TimeAxis
 import com.netflix.atlas.chart.model.PlotBound.AutoStyle
 import com.netflix.atlas.chart.model.PlotBound.Explicit
 import com.netflix.atlas.core.model.TimeSeq
@@ -40,7 +43,7 @@ import com.netflix.atlas.core.model.TimeSeq
   *     Lower limit for the axis.
   * @param tickLabelMode
   *     Mode to use for displaying tick labels.
-  * @param heatmapDef
+  * @param heatmap
   *     Optional heatmap settings for the plot.
   */
 case class PlotDef(
@@ -51,7 +54,7 @@ case class PlotDef(
   upper: PlotBound = AutoStyle,
   lower: PlotBound = AutoStyle,
   tickLabelMode: TickLabelMode = TickLabelMode.DECIMAL,
-  heatmapDef: Option[HeatmapDef] = None
+  heatmap: Option[HeatmapDef] = None
 ) {
 
   import java.lang.{Double => JDouble}
@@ -177,7 +180,33 @@ case class PlotDef(
 
   def lines: List[LineDef] = data.collect { case v: LineDef => v }
 
+  def renderedLines: List[LineDef] = data.collect {
+    case v: LineDef if v.lineStyle != LineStyle.HEATMAP => v
+  }
+
+  def heatmapLines: List[LineDef] = data.collect {
+    case v: LineDef if v.lineStyle == LineStyle.HEATMAP => v
+  }
+
+  def legendData: List[DataDef] = data.filter {
+    case v: LineDef if v.lineStyle == LineStyle.HEATMAP => false
+    case _                                              => true
+  }
+
   def normalize(theme: Theme): PlotDef = {
     copy(axisColor = Some(getAxisColor(theme.legend.text.color)))
+  }
+
+  def heatmapData(gdef: GraphDef): Option[Heatmap] = {
+    heatmap.map { settings =>
+      val start = gdef.startTime.toEpochMilli
+      val end = gdef.endTime.toEpochMilli
+      val xaxis = TimeAxis(Style.default, start, end, gdef.step)
+
+      val (min, max) = bounds(start, end)
+      val yaxis = LeftValueAxis(this, gdef.theme.axis, min, max)
+
+      Heatmap(settings, heatmapLines, xaxis, yaxis, gdef.height)
+    }
   }
 }

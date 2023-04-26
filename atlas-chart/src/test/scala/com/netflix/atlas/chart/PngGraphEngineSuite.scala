@@ -726,9 +726,29 @@ abstract class PngGraphEngineSuite extends FunSuite {
     lines(s"vision_${vt.name}", (0 until 9).map(_ => 100.0).toSeq, f)
   }
 
+  test("heatmap_basic") {
+    val graphDef = loadV2(s"$dataDir/heatmap_basic.json")
+    check("heatmap_basic.png", graphDef)
+  }
+
+  test("heatmap_basic_negative") {
+    val graphDef = loadV2(s"$dataDir/heatmap_basic_negative.json")
+    check("heatmap_basic_negative.png", graphDef)
+  }
+
   test("heatmap_timer") {
     val graphDef = loadV2(s"$dataDir/heatmap_timer.json")
     check("heatmap_timer.png", graphDef)
+  }
+
+  test("heatmap_timer2") {
+    val graphDef = loadV2(s"$dataDir/heatmap_timer2.json")
+    check("heatmap_timer2.png", graphDef)
+  }
+
+  test("heatmap_timer3") {
+    val graphDef = loadV2(s"$dataDir/heatmap_timer3.json")
+    check("heatmap_timer3.png", graphDef)
   }
 
   test("heatmap_dist") {

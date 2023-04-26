@@ -15,8 +15,6 @@
  */
 package com.netflix.atlas.chart.model
 
-import com.netflix.atlas.chart.model.PlotBound
-
 /**
   * A configuration used to compute and optionally plot a heatmap.
   *
@@ -28,13 +26,20 @@ import com.netflix.atlas.chart.model.PlotBound
   *     An optional lower boundary for the cell count.
   * @param palette
   *     An optional palette to use for the heatmap
-  * @param legend
+  * @param label
   *     A string to use for the legend.
   */
 case class HeatmapDef(
-  colorScale: Scale = Scale.LINEAR,
-  upper: PlotBound = PlotBound.AutoData,
-  lower: PlotBound = PlotBound.AutoData,
-  palette: Option[Palette] = None,
-  legend: Option[String] = None
-)
+                       colorScale: Scale = Scale.LINEAR,
+                       upper: PlotBound = PlotBound.AutoData,
+                       lower: PlotBound = PlotBound.AutoData,
+                       palette: Option[Palette] = None,
+                       label: Option[String] = None
+) {
+
+  (lower, upper) match {
+    case (PlotBound.Explicit(l), PlotBound.Explicit(u)) =>
+      require(l < u, s"lower bound must be less than upper bound ($l >= $u)")
+    case (_, _) =>
+  }
+}

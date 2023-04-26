@@ -1,19 +1,40 @@
+/*
+ * Copyright 2014-2023 Netflix, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.netflix.atlas.chart.graphics
 
+import com.netflix.atlas.chart.model.HeatmapDef
 import com.netflix.atlas.chart.model.LineDef
 import com.netflix.atlas.chart.model.LineStyle
+import com.netflix.atlas.chart.model.Palette
+import com.netflix.atlas.chart.model.PlotBound
+import com.netflix.atlas.chart.model.TickLabelMode
 import com.netflix.atlas.core.model.TagKey
 import com.netflix.spectator.api.histogram.PercentileBuckets
 
+import java.awt.Color
 import scala.collection.immutable.ArraySeq
 
 case class Heatmap(
-             lines: List[LineDef],
-             xaxis: TimeAxis,
-             yaxis: ValueAxis,
-             y1: Int,
-             y2: Int
-             ) {
+                  settings: HeatmapDef,
+  lines: List[LineDef],
+  xaxis: TimeAxis,
+  yaxis: ValueAxis,
+  canvasHeight: Int
+) {
+
   require(lines.nonEmpty)
 
   val step: Long = lines.head.data.data.step
@@ -24,7 +45,11 @@ case class Heatmap(
   private val minValue = yaxis.min
   private val maxValue = yaxis.max
 
-  val ticks: ArraySeq[ValueTick] = ArraySeq.unsafeWrapArray(yaxis.ticks(y1, y2).toArray)
+  val yTicks: ArraySeq[ValueTick] = ArraySeq.unsafeWrapArray(yaxis.ticks(0, canvasHeight).toArray)
+
+  val palette: Palette = settings.palette.getOrElse {
+    Palette.gradient(lines.head.color)
+  }
 
   private val counts: Array[Array[Double]] = computeCounts()
 
@@ -45,6 +70,49 @@ case class Heatmap(
     min -> max
   }
 
+  private val colorScale = Scales.factory(settings.colorScale)(
+    settings.lower.lower(hasArea = false, minCount),
+    settings.upper.upper(hasArea = false, maxCount),
+    palette.colorArray.size,
+    0
+  )
+
+  def colorTicks(mode: TickLabelMode): ArraySeq[ValueTick] = {
+    val numTicks = palette.colorArray.length
+    val ticks = mode match {
+      case TickLabelMode.BINARY   => Ticks.binary(minCount, maxCount, numTicks)
+      case TickLabelMode.DURATION => Ticks.duration(minCount, maxCount, numTicks)
+      case _                      => Ticks.value(minCount, maxCount, numTicks, settings.colorScale)
+    }
+    ArraySeq.from(ticks)
+  }
+
+  private def boundLower(count: Double): Double = {
+    settings.lower match {
+      case PlotBound.Explicit(v) if count < v => v
+      case _ => count
+    }
+  }
+
+  private def boundUpper(count: Double): Double = {
+    settings.upper match {
+      case PlotBound.Explicit(v) if count > v => v
+      case _ => count
+    }
+  }
+
+  private def boundedCount(count: Double): Double = {
+    boundUpper(boundLower(count))
+  }
+
+  private def lookupColor(i: Int): Color = {
+    // The default palette lookup will go back to the first color if the index exceeds the
+    // last index of hte palette's color array. For heatmaps that is not desirable and should
+    // just use the last color.
+    val idx = if (i >= palette.colorArray.size) i - 1 else i
+    palette.colorArray(idx)
+  }
+
   private def findBucket(value: Double): Int = {
     // When using explicit bounds, some values may not be visible
     if (value < minValue || value > maxValue) {
@@ -53,12 +121,12 @@ case class Heatmap(
 
     // Find the matching bucket
     var i = 0
-    while (i < ticks.length) {
-      if (value < ticks(i).v)
+    while (i < yTicks.length) {
+      if (value < yTicks(i).v)
         return i
       i += 1
     }
-    ticks.length
+    yTicks.length
   }
 
   private def computeWeight(mn: Double, mx: Double, cellMin: Double, cellMax: Double): Double = {
@@ -75,8 +143,8 @@ case class Heatmap(
   private def updateCounts(mn: Double, mx: Double, cnt: Double, counts: Array[Double]): Unit = {
     var cellMin = minValue
     var i = 0
-    while (i < ticks.length) {
-      val cellMax = ticks(i).v
+    while (i < yTicks.length) {
+      val cellMax = yTicks(i).v
       counts(i) += cnt * computeWeight(mn, mx, cellMin, cellMax)
       if (cellMax > mx) {
         // Stop early once passed the max of the bucket range
@@ -90,7 +158,7 @@ case class Heatmap(
 
   private def computeCounts(): Array[Array[Double]] = {
     val w = ((end - start) / step).toInt
-    val h = ticks.length + 1
+    val h = yTicks.length + 1
     val counts = Array.fill(w, h)(0.0)
 
     lines.foreach { line =>
@@ -119,11 +187,23 @@ case class Heatmap(
     counts
   }
 
-  def numberOfValueBuckets: Int = ticks.length + 1
+  def numberOfValueBuckets: Int = yTicks.length + 1
 
   def count(t: Long, y: Int): Double = {
     val x = ((t - start) / step).toInt
     counts(x)(y)
+  }
+
+  def color(t: Long, y: Int): Option[Color] = {
+    val c = count(t, y)
+    if (c > 0.0)
+      Some(color(c))
+    else
+      None
+  }
+
+  def color(c: Double): Color = {
+    lookupColor(colorScale(boundedCount(c)))
   }
 }
 
@@ -138,7 +218,7 @@ object Heatmap {
       val k = String.format("%04X", i)
       val max = PercentileBuckets.get(i)
       builder += s"D$k" -> (min.toDouble -> max.toDouble)
-      builder += s"T$k" -> (min / 1e9 -> max / 1e9)
+      builder += s"T$k" -> (min / 1e9    -> max / 1e9)
       min = max
       i += 1
     }

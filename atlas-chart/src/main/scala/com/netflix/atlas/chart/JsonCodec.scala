@@ -91,6 +91,7 @@ private[chart] object JsonCodec {
     config.plots.zipWithIndex.foreach {
       case (plot, i) =>
         writePlotDefMetadata(gen, plot, i)
+        writeHeatmapDef(gen, config, plot, i)
     }
     config.plots.zipWithIndex.foreach {
       case (plot, i) =>
@@ -184,6 +185,76 @@ private[chart] object JsonCodec {
     gen.writeStringField("lower", plot.lower.toString)
     gen.writeStringField("tickLabelMode", plot.tickLabelMode.name())
     gen.writeEndObject()
+  }
+
+  private def writeHeatmapDef(gen: JsonGenerator, graph: GraphDef, plot: PlotDef, id: Int): Unit = {
+    plot.heatmapData(graph).foreach { heatmap =>
+      gen.writeStartObject()
+      gen.writeStringField("type", "heatmap")
+      gen.writeNumberField("plot", id)
+      gen.writeStringField("colorScale", heatmap.settings.colorScale.name())
+      gen.writeStringField("upper", heatmap.settings.upper.toString)
+      gen.writeStringField("lower", heatmap.settings.lower.toString)
+      heatmap.settings.label.foreach { label =>
+        gen.writeStringField("label", label)
+      }
+
+      // Y-tick information, used to define the vertical buckets for heatmap counts. Included
+      // so the result can be reproduced in a dynamic rendering.
+      gen.writeArrayFieldStart("yTicks")
+      var min = heatmap.yaxis.min
+      var i = 0
+      while (i < heatmap.yTicks.length) {
+        val max = heatmap.yTicks(i).v
+        gen.writeStartObject()
+        gen.writeNumberField("min", min)
+        gen.writeNumberField("max", max)
+        gen.writeStringField("label", heatmap.yTicks(i).label)
+        gen.writeEndObject()
+        min = max
+        i += 1
+      }
+      gen.writeEndArray()
+
+      // Color ticks used to map counts to a color
+      gen.writeArrayFieldStart("colorTicks")
+      val colorTicks = heatmap.colorTicks(plot.tickLabelMode)
+      min = heatmap.minCount
+      i = 0
+      while (i < colorTicks.length) {
+        val max = colorTicks(i).v
+        gen.writeStartObject()
+        gen.writeFieldName("color")
+        writeColor(gen, heatmap.color((max - min) / 2.0))
+        gen.writeNumberField("min", min)
+        gen.writeNumberField("max", max)
+        gen.writeStringField("label", heatmap.yTicks(i).label)
+        gen.writeEndObject()
+        min = max
+        i += 1
+      }
+      gen.writeEndArray()
+
+      // Output the counts associated with each cell
+      gen.writeObjectFieldStart("data")
+      gen.writeStringField("type", "heatmap")
+      gen.writeArrayFieldStart("values")
+      var t = heatmap.xaxis.start
+      while (t < heatmap.xaxis.end) {
+        gen.writeStartArray()
+        var y = 0
+        while (y < heatmap.numberOfValueBuckets) {
+          gen.writeNumber(heatmap.count(t, y))
+          y += 1
+        }
+        gen.writeEndArray()
+        t += 1
+      }
+      gen.writeEndArray()
+      gen.writeEndObject()
+
+      gen.writeEndObject()
+    }
   }
 
   private def writeDataDef(
