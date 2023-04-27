@@ -158,6 +158,9 @@ abstract class PngGraphEngineSuite extends FunSuite {
 
   def checkImpl(name: String, graphDef: GraphDef): Unit = {
     val json = JsonCodec.encode(graphDef)
+    val h1 = graphDef.normalize.plots.map(_.heatmap)
+    val h2 = JsonCodec.decode(json).normalize.plots.map(_.heatmap)
+    assertEquals(h1,h2)
     assertEquals(graphDef.normalize, JsonCodec.decode(json).normalize)
 
     val image = PngImage(graphEngine.createImage(graphDef), Map.empty)
@@ -736,6 +739,69 @@ abstract class PngGraphEngineSuite extends FunSuite {
     check("heatmap_basic_negative.png", graphDef)
   }
 
+  test("heatmap_basic_nostats") {
+    val graphDef = loadV2(s"$dataDir/heatmap_basic.json").copy(
+      legendType = LegendType.LABELS_ONLY
+    )
+    check("heatmap_basic_nostats.png", graphDef)
+  }
+
+  test("heatmap_basic_bounds") {
+    val graphDef = loadV2(s"$dataDir/heatmap_basic.json").adjustPlots(
+      _.copy(upper = PlotBound.Explicit(0.2))
+    )
+    check("heatmap_basic_bounds.png", graphDef)
+  }
+
+  test("heatmap_basic_palette") {
+    val graphDef = loadV2(s"$dataDir/heatmap_basic.json").adjustPlots(
+      _.copy(heatmap = Some(HeatmapDef(palette = Some(Palette.fromResource("armytage")))))
+    )
+    check("heatmap_basic_palette.png", graphDef)
+  }
+
+  test("heatmap_basic_log") {
+    val graphDef = loadV2(s"$dataDir/heatmap_basic.json").adjustPlots(
+      _.copy(scale = Scale.LOGARITHMIC)
+    )
+    check("heatmap_basic_log.png", graphDef)
+  }
+
+  test("heatmap_basic_reds") {
+    val graphDef = loadV2(s"$dataDir/heatmap_basic.json").adjustPlots(
+      _.copy(heatmap = Some(HeatmapDef(palette = Some(Palette.fromResource("reds")))))
+    )
+    check("heatmap_basic_reds.png", graphDef)
+  }
+
+  test("heatmap_basic_color_bounds") {
+    val graphDef = loadV2(s"$dataDir/heatmap_basic.json").adjustPlots(
+      _.copy(heatmap = Some(HeatmapDef(upper = PlotBound.Explicit(100))))
+    )
+    check("heatmap_basic_color_bounds.png", graphDef)
+  }
+
+  test("heatmap_basic_color_log") {
+    val graphDef = loadV2(s"$dataDir/heatmap_basic.json").adjustPlots(
+      _.copy(heatmap = Some(HeatmapDef(colorScale = Scale.LOGARITHMIC)))
+    )
+    check("heatmap_basic_color_log.png", graphDef)
+  }
+
+  test("heatmap_basic_color_power2") {
+    val graphDef = loadV2(s"$dataDir/heatmap_basic.json").adjustPlots(
+      _.copy(heatmap = Some(HeatmapDef(colorScale = Scale.POWER_2)))
+    )
+    check("heatmap_basic_color_power2.png", graphDef)
+  }
+
+  test("heatmap_basic_color_sqrt") {
+    val graphDef = loadV2(s"$dataDir/heatmap_basic.json").adjustPlots(
+      _.copy(heatmap = Some(HeatmapDef(colorScale = Scale.SQRT)))
+    )
+    check("heatmap_basic_color_sqrt.png", graphDef)
+  }
+
   test("heatmap_timer") {
     val graphDef = loadV2(s"$dataDir/heatmap_timer.json")
     check("heatmap_timer.png", graphDef)
@@ -749,6 +815,66 @@ abstract class PngGraphEngineSuite extends FunSuite {
   test("heatmap_timer3") {
     val graphDef = loadV2(s"$dataDir/heatmap_timer3.json")
     check("heatmap_timer3.png", graphDef)
+  }
+
+  test("heatmap_timer_overlay") {
+    val graphDef = loadV2(s"$dataDir/heatmap_timer_overlay.json")
+    check("heatmap_timer_overlay.png", graphDef)
+  }
+
+  test("heatmap_timer_overlay_upper") {
+    val graphDef = loadV2(s"$dataDir/heatmap_timer_overlay.json").adjustPlots(_.copy(
+      lower = PlotBound.Explicit(0.0),
+      upper = PlotBound.Explicit(0.02),
+      heatmap = Some(HeatmapDef(colorScale = Scale.LOGARITHMIC))
+    ))
+    check("heatmap_timer_overlay_upper.png", graphDef)
+  }
+
+  test("heatmap_timer_overlay_area") {
+    val graphDef = loadV2(s"$dataDir/heatmap_timer_overlay.json")
+      .adjustPlots(_.copy(
+        lower = PlotBound.Explicit(0.0),
+        upper = PlotBound.Explicit(0.02),
+        heatmap = Some(HeatmapDef(colorScale = Scale.LOGARITHMIC))
+      ))
+      .adjustLines { line =>
+        if (line.lineStyle == LineStyle.LINE)
+          line.copy(lineStyle = LineStyle.AREA)
+        else
+          line
+      }
+    check("heatmap_timer_overlay_area.png", graphDef)
+  }
+
+  test("heatmap_timer_overlay_stack") {
+    val graphDef = loadV2(s"$dataDir/heatmap_timer_overlay.json")
+      .adjustPlots(_.copy(
+        lower = PlotBound.Explicit(0.0),
+        upper = PlotBound.Explicit(0.02),
+        heatmap = Some(HeatmapDef(colorScale = Scale.LOGARITHMIC))
+      ))
+      .adjustLines { line =>
+        if (line.lineStyle == LineStyle.LINE)
+          line.copy(lineStyle = LineStyle.STACK)
+        else
+          line
+      }
+    check("heatmap_timer_overlay_stack.png", graphDef)
+  }
+
+  test("heatmap_timer_overlay_multiy") {
+    val graphDef = loadV2(s"$dataDir/heatmap_timer_overlay.json")
+    val plot = graphDef.plots.head
+    val heatmap = plot.copy(data = plot.heatmapLines, ylabel = Some("heatmap"))
+    val percentiles = plot.copy(data = plot.legendData, ylabel = Some("percentiles"))
+    val mulitY = graphDef.copy(plots = List(heatmap, percentiles))
+    check("heatmap_timer_overlay_multiy.png", mulitY)
+  }
+
+  test("heatmap_timer_small") {
+    val graphDef = loadV2(s"$dataDir/heatmap_timer_small.json")
+    check("heatmap_timer_small.png", graphDef)
   }
 
   test("heatmap_dist") {

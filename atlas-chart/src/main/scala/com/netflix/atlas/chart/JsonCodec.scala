@@ -220,12 +220,12 @@ private[chart] object JsonCodec {
       gen.writeArrayFieldStart("colorTicks")
       val colorTicks = heatmap.colorTicks
       min = heatmap.minCount
-      i = 0
+      i = 1
       while (i < colorTicks.size) {
         val max = colorTicks(i).v
         gen.writeStartObject()
         gen.writeFieldName("color")
-        writeColor(gen, heatmap.color((max - min) / 2.0))
+        writeColor(gen, heatmap.palette.colors(i - 1))
         gen.writeNumberField("min", min)
         gen.writeNumberField("max", max)
         gen.writeStringField("label", heatmap.yTicks(i).label)
@@ -248,7 +248,7 @@ private[chart] object JsonCodec {
           y += 1
         }
         gen.writeEndArray()
-        t += 1
+        t += graph.step
       }
       gen.writeEndArray()
       gen.writeEndObject()
@@ -354,6 +354,7 @@ private[chart] object JsonCodec {
   private def readGraphDef(parser: JsonParser): GraphDef = {
     var gdef: GraphDef = null
     val plots = Map.newBuilder[Int, PlotDef]
+    val heatmaps = Map.newBuilder[Int, HeatmapDef]
     val data = List.newBuilder[(Int, DataDef)]
     foreachItem(parser) {
       val node = mapper.readTree[JsonNode](parser)
@@ -366,6 +367,9 @@ private[chart] object JsonCodec {
           gdef = toGraphDef(node)
         case "plot-metadata" =>
           plots += node.get("id").asInt(0) -> toPlotDef(node)
+        case "heatmap" =>
+          val plot = node.get("plot").asInt(0)
+          heatmaps += plot -> toHeatmapDef(node)
         case "timeseries" =>
           val plot = node.get("plot").asInt(0)
           data += plot -> toLineDef(gdef, node)
@@ -381,13 +385,14 @@ private[chart] object JsonCodec {
       }
     }
 
+    val heatmapData = heatmaps.result()
     val groupedData = data.result().groupBy(_._1)
 
     val sortedPlots = plots.result().toList.sortWith(_._1 < _._1)
     val plotList = sortedPlots.map {
       case (id, plot) =>
         val plotLines = groupedData.get(id).map(_.map(_._2)).getOrElse(Nil)
-        plot.copy(data = plotLines)
+        plot.copy(data = plotLines, heatmap = heatmapData.get(id))
     }
 
     gdef.copy(plots = plotList)
@@ -479,6 +484,24 @@ private[chart] object JsonCodec {
     } else {
       Nil
     }
+  }
+
+  private def toHeatmapDef(node: JsonNode): HeatmapDef = {
+    import scala.jdk.CollectionConverters._
+    val colors = node.get("colorTicks")
+      .elements()
+      .asScala
+      .map { node =>
+        toColor(node.get("color"))
+      }
+      .toArray
+    HeatmapDef(
+      colorScale = Scale.valueOf(node.get("colorScale").asText()),
+      upper = PlotBound(node.get("upper").asText()),
+      lower = PlotBound(node.get("lower").asText()),
+      palette = Some(Palette.fromArray("heatmap", colors)),
+      label = Option(node.get("label")).map(_.asText())
+    )
   }
 
   private def toLineDef(gdef: GraphDef, node: JsonNode): LineDef = {

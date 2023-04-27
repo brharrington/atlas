@@ -194,11 +194,26 @@ case class PlotDef(
   }
 
   def normalize(theme: Theme): PlotDef = {
-    copy(axisColor = Some(getAxisColor(theme.legend.text.color)))
+    copy(axisColor = Some(getAxisColor(theme.legend.text.color)), heatmap = heatmapSettings)
+  }
+
+  def heatmapSettings: Option[HeatmapDef] = {
+    if (heatmapLines.nonEmpty) {
+      val settings = heatmap.getOrElse(HeatmapDef())
+      val palette = settings.palette
+        .getOrElse {
+          Palette.gradient(heatmapLines.head.color)
+        }
+        .copy(name = "heatmap")
+      Some(settings.copy(palette = Some(palette)))
+    } else {
+      None
+    }
   }
 
   def heatmapData(gdef: GraphDef): Option[Heatmap] = {
-    heatmap.map { settings =>
+    if (heatmapLines.nonEmpty) {
+      val settings = heatmap.getOrElse(HeatmapDef())
       val start = gdef.startTime.toEpochMilli
       val end = gdef.endTime.toEpochMilli
       val xaxis = TimeAxis(Style.default, start, end, gdef.step)
@@ -206,7 +221,9 @@ case class PlotDef(
       val (min, max) = bounds(start, end)
       val yaxis = LeftValueAxis(this, gdef.theme.axis, min, max)
 
-      Heatmap(settings, heatmapLines, xaxis, yaxis, gdef.height)
+      Some(Heatmap(settings, heatmapLines, xaxis, yaxis, gdef.height))
+    } else {
+      None
     }
   }
 }

@@ -76,7 +76,8 @@ case class Heatmap(
 
   val colorTicks: ArraySeq[ValueTick] = {
     val numTicks = palette.colorArray.size
-    val ticks = Ticks.simple(maxCount, numTicks, settings.colorScale)
+    val max = settings.upper.upper(hasArea = false, maxCount)
+    val ticks = Ticks.simple(max, numTicks, settings.colorScale)
     ArraySeq.from(ticks)
   }
 
