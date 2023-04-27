@@ -40,7 +40,7 @@ case class Axis(
   heatmapUpper: Option[String] = None,
   heatmapLower: Option[String] = None,
   heatmapPalette: Option[String] = None,
-  heatmapLegend: Option[String] = None
+  heatmapLabel: Option[String] = None
 ) {
 
   val tickLabelMode: TickLabelMode = {
@@ -59,23 +59,29 @@ case class Axis(
 
   def newPlotDef(data: List[DataDef] = Nil, multiY: Boolean = false): PlotDef = {
     val label = ylabel.map(s => Strings.substitute(s, getAxisTags(data)))
-    PlotDef(
+    val plot = PlotDef(
       data = data,
       lower = lower.fold[PlotBound](AutoStyle)(v => PlotBound(v)),
       upper = upper.fold[PlotBound](AutoStyle)(v => PlotBound(v)),
       ylabel = label,
       scale = Scale.fromName(scale.getOrElse("linear")),
       axisColor = if (multiY) data.headOption.map(_.color) else None,
-      tickLabelMode = tickLabelMode,
-      heatmap = Some(
-        HeatmapDef(
-          heatmapScale.fold[Scale](Scale.LINEAR)(Scale.fromName(_)),
-          heatmapUpper.fold[PlotBound](AutoStyle)(v => PlotBound(v)),
-          heatmapLower.fold[PlotBound](AutoStyle)(v => PlotBound(v)),
-          heatmapPalette.fold[Option[Palette]](None)(p => Some(Palette.create(p))),
-          heatmapLegend
+      tickLabelMode = tickLabelMode
+    )
+    if (plot.heatmapLines.nonEmpty) {
+      plot.copy(
+        heatmap = Some(
+          HeatmapDef(
+            colorScale = Scale.fromName(heatmapScale.getOrElse("linear")),
+            lower = heatmapLower.fold[PlotBound](AutoStyle)(v => PlotBound(v)),
+            upper = heatmapUpper.fold[PlotBound](AutoStyle)(v => PlotBound(v)),
+            palette = heatmapPalette.map(Palette.create),
+            label = heatmapLabel
+          )
         )
       )
-    )
+    } else {
+      plot
+    }
   }
 }

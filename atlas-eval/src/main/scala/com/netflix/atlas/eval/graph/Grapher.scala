@@ -202,7 +202,12 @@ case class Grapher(settings: DefaultSettings) {
       tickLabels = getAxisParam(params, "tick_labels", id),
       palette = params.get(s"palette.$id"),
       sort = getAxisParam(params, "sort", id),
-      order = getAxisParam(params, "order", id)
+      order = getAxisParam(params, "order", id),
+      heatmapScale = getAxisParam(params, "heatmap_scale", id),
+      heatmapUpper = getAxisParam(params, "heatmap_u", id),
+      heatmapLower = getAxisParam(params, "heatmap_l", id),
+      heatmapPalette = getAxisParam(params, "heatmap_palette", id),
+      heatmapLabel = getAxisParam(params, "heatmap_label", id)
     )
   }
 
@@ -305,21 +310,8 @@ case class Grapher(settings: DefaultSettings) {
 
     val plots = plotExprs.toList.sortWith(_._1 < _._1).map {
       case (yaxis, exprs) =>
-        var axisCfg = config.flags.axes(yaxis)
+        val axisCfg = config.flags.axes(yaxis)
         val dfltStyle = if (axisCfg.stack) LineStyle.STACK else LineStyle.LINE
-
-        if (
-          (dfltStyle == LineStyle.STACK || exprs.exists(
-            _.lineStyle.fold(dfltStyle)(s => LineStyle.valueOf(s.toUpperCase)) == LineStyle.STACK
-          )) && exprs.exists(
-            _.lineStyle
-              .fold(dfltStyle)(s => LineStyle.valueOf(s.toUpperCase)) == LineStyle.HEATMAP
-          )
-        ) {
-          throw new IllegalArgumentException(
-            "Mixing STACK and HEATMAP line styles on the same axis is not allowed."
-          )
-        }
 
         val statFormatter = axisCfg.tickLabelMode match {
           case TickLabelMode.BINARY =>
@@ -377,7 +369,7 @@ case class Grapher(settings: DefaultSettings) {
                 val c = lineStyle match {
                   case LineStyle.HEATMAP =>
                     if (axisCfg.heatmapPalette.nonEmpty) {
-                      // don't consume a color if the the global heatmap palette is configured.
+                      // Don't consume a color if the the global heatmap palette is configured.
                       // Just set it to something.
                       if (heatmapColor == null) heatmapColor = Color.BLACK
                     } else {
@@ -390,21 +382,6 @@ case class Grapher(settings: DefaultSettings) {
                 // assigned by the palette. If using an explicit color it will have no effect as the
                 // alpha can be set directly using an ARGB hex format for the color.
                 s.alpha.fold(c)(a => Colors.withAlpha(c, a))
-              }
-
-              // determine a palette to assign to the line. This is primarily used
-              // by heatmaps and imposes an order of precedence starting with an
-              // overarching heatmap palette.
-              if (lineStyle == LineStyle.HEATMAP && axisCfg.palette.isEmpty) {
-                if (s.palette.nonEmpty) {
-                  axisCfg = axisCfg.copy(
-                    heatmapPalette = s.palette
-                  )
-                } else if (axisCfg.palette.nonEmpty) {
-                  axisCfg = axisCfg.copy(
-                    heatmapPalette = axisCfg.palette
-                  )
-                }
               }
 
               LineDef(
