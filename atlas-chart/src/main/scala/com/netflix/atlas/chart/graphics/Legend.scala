@@ -49,14 +49,12 @@ case class Legend(
     Text(str, font = bold, alignment = TextAlignment.LEFT, style = Style(headerColor))
   }
 
-  private val heatmapEntry = heatmap
-    .toList
+  private val heatmapEntry = heatmap.toList
     .flatMap { h =>
-      List(HorizontalPadding(2), HeatmapLegendEntry(styles, plot, h))
+      List(HorizontalPadding(2), HeatmapLegendEntry(styles, plot, h, showStats))
     }
 
-  private val entries = plot
-    .legendData
+  private val entries = plot.legendData
     .take(maxEntries)
     .flatMap { data =>
       List(HorizontalPadding(2), LegendEntry(styles, plot, data, showStats))

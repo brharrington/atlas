@@ -20,7 +20,6 @@ import com.netflix.atlas.chart.model.LineDef
 import com.netflix.atlas.chart.model.LineStyle
 import com.netflix.atlas.chart.model.Palette
 import com.netflix.atlas.chart.model.PlotBound
-import com.netflix.atlas.chart.model.TickLabelMode
 import com.netflix.atlas.core.model.TagKey
 import com.netflix.spectator.api.histogram.PercentileBuckets
 
@@ -28,7 +27,7 @@ import java.awt.Color
 import scala.collection.immutable.ArraySeq
 
 case class Heatmap(
-                  settings: HeatmapDef,
+  settings: HeatmapDef,
   lines: List[LineDef],
   xaxis: TimeAxis,
   yaxis: ValueAxis,
@@ -54,20 +53,18 @@ case class Heatmap(
   private val counts: Array[Array[Double]] = computeCounts()
 
   val (minCount: Double, maxCount: Double) = {
-    var min = Double.MaxValue
     var max = Double.MinValue
     var i = 0
     while (i < counts.length) {
       var j = 0
       while (j < counts(i).length) {
         val v = counts(i)(j)
-        min = math.min(min, v)
         max = math.max(max, v)
         j += 1
       }
       i += 1
     }
-    min -> max
+    0.0 -> Ticks.roundToOneSignificantDigit(max)
   }
 
   private val colorScale = Scales.factory(settings.colorScale)(
@@ -77,27 +74,23 @@ case class Heatmap(
     0
   )
 
-  def colorTicks(mode: TickLabelMode): ArraySeq[ValueTick] = {
-    val numTicks = palette.colorArray.length
-    val ticks = mode match {
-      case TickLabelMode.BINARY   => Ticks.binary(minCount, maxCount, numTicks)
-      case TickLabelMode.DURATION => Ticks.duration(minCount, maxCount, numTicks)
-      case _                      => Ticks.value(minCount, maxCount, numTicks, settings.colorScale)
-    }
+  val colorTicks: ArraySeq[ValueTick] = {
+    val numTicks = palette.colorArray.size
+    val ticks = Ticks.simple(maxCount, numTicks, settings.colorScale)
     ArraySeq.from(ticks)
   }
 
   private def boundLower(count: Double): Double = {
     settings.lower match {
       case PlotBound.Explicit(v) if count < v => v
-      case _ => count
+      case _                                  => count
     }
   }
 
   private def boundUpper(count: Double): Double = {
     settings.upper match {
       case PlotBound.Explicit(v) if count > v => v
-      case _ => count
+      case _                                  => count
     }
   }
 

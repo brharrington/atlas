@@ -30,11 +30,11 @@ package com.netflix.atlas.chart.model
   *     A string to use for the legend.
   */
 case class HeatmapDef(
-                       colorScale: Scale = Scale.LINEAR,
-                       upper: PlotBound = PlotBound.AutoData,
-                       lower: PlotBound = PlotBound.AutoData,
-                       palette: Option[Palette] = None,
-                       label: Option[String] = None
+  colorScale: Scale = Scale.LINEAR,
+  upper: PlotBound = PlotBound.AutoData,
+  lower: PlotBound = PlotBound.AutoData,
+  palette: Option[Palette] = None,
+  label: Option[String] = None
 ) {
 
   (lower, upper) match {

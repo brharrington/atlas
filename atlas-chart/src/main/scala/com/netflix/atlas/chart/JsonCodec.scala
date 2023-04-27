@@ -204,7 +204,7 @@ private[chart] object JsonCodec {
       gen.writeArrayFieldStart("yTicks")
       var min = heatmap.yaxis.min
       var i = 0
-      while (i < heatmap.yTicks.length) {
+      while (i < heatmap.yTicks.size) {
         val max = heatmap.yTicks(i).v
         gen.writeStartObject()
         gen.writeNumberField("min", min)
@@ -218,10 +218,10 @@ private[chart] object JsonCodec {
 
       // Color ticks used to map counts to a color
       gen.writeArrayFieldStart("colorTicks")
-      val colorTicks = heatmap.colorTicks(plot.tickLabelMode)
+      val colorTicks = heatmap.colorTicks
       min = heatmap.minCount
       i = 0
-      while (i < colorTicks.length) {
+      while (i < colorTicks.size) {
         val max = colorTicks(i).v
         gen.writeStartObject()
         gen.writeFieldName("color")
