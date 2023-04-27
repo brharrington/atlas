@@ -488,7 +488,8 @@ private[chart] object JsonCodec {
 
   private def toHeatmapDef(node: JsonNode): HeatmapDef = {
     import scala.jdk.CollectionConverters._
-    val colors = node.get("colorTicks")
+    val colors = node
+      .get("colorTicks")
       .elements()
       .asScala
       .map { node =>

@@ -158,9 +158,6 @@ abstract class PngGraphEngineSuite extends FunSuite {
 
   def checkImpl(name: String, graphDef: GraphDef): Unit = {
     val json = JsonCodec.encode(graphDef)
-    val h1 = graphDef.normalize.plots.map(_.heatmap)
-    val h2 = JsonCodec.decode(json).normalize.plots.map(_.heatmap)
-    assertEquals(h1,h2)
     assertEquals(graphDef.normalize, JsonCodec.decode(json).normalize)
 
     val image = PngImage(graphEngine.createImage(graphDef), Map.empty)
@@ -823,21 +820,25 @@ abstract class PngGraphEngineSuite extends FunSuite {
   }
 
   test("heatmap_timer_overlay_upper") {
-    val graphDef = loadV2(s"$dataDir/heatmap_timer_overlay.json").adjustPlots(_.copy(
-      lower = PlotBound.Explicit(0.0),
-      upper = PlotBound.Explicit(0.02),
-      heatmap = Some(HeatmapDef(colorScale = Scale.LOGARITHMIC))
-    ))
+    val graphDef = loadV2(s"$dataDir/heatmap_timer_overlay.json").adjustPlots(
+      _.copy(
+        lower = PlotBound.Explicit(0.0),
+        upper = PlotBound.Explicit(0.02),
+        heatmap = Some(HeatmapDef(colorScale = Scale.LOGARITHMIC))
+      )
+    )
     check("heatmap_timer_overlay_upper.png", graphDef)
   }
 
   test("heatmap_timer_overlay_area") {
     val graphDef = loadV2(s"$dataDir/heatmap_timer_overlay.json")
-      .adjustPlots(_.copy(
-        lower = PlotBound.Explicit(0.0),
-        upper = PlotBound.Explicit(0.02),
-        heatmap = Some(HeatmapDef(colorScale = Scale.LOGARITHMIC))
-      ))
+      .adjustPlots(
+        _.copy(
+          lower = PlotBound.Explicit(0.0),
+          upper = PlotBound.Explicit(0.02),
+          heatmap = Some(HeatmapDef(colorScale = Scale.LOGARITHMIC))
+        )
+      )
       .adjustLines { line =>
         if (line.lineStyle == LineStyle.LINE)
           line.copy(lineStyle = LineStyle.AREA)
@@ -849,11 +850,13 @@ abstract class PngGraphEngineSuite extends FunSuite {
 
   test("heatmap_timer_overlay_stack") {
     val graphDef = loadV2(s"$dataDir/heatmap_timer_overlay.json")
-      .adjustPlots(_.copy(
-        lower = PlotBound.Explicit(0.0),
-        upper = PlotBound.Explicit(0.02),
-        heatmap = Some(HeatmapDef(colorScale = Scale.LOGARITHMIC))
-      ))
+      .adjustPlots(
+        _.copy(
+          lower = PlotBound.Explicit(0.0),
+          upper = PlotBound.Explicit(0.02),
+          heatmap = Some(HeatmapDef(colorScale = Scale.LOGARITHMIC))
+        )
+      )
       .adjustLines { line =>
         if (line.lineStyle == LineStyle.LINE)
           line.copy(lineStyle = LineStyle.STACK)
