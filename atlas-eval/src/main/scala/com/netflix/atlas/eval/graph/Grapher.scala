@@ -373,7 +373,7 @@ case class Grapher(settings: DefaultSettings) {
                       // Just set it to something.
                       if (heatmapColor == null) heatmapColor = Color.BLACK
                     } else {
-                      if (heatmapColor == null) heatmapColor = palette(s"heatmap${yaxis}")
+                      if (heatmapColor == null) heatmapColor = palette(s"heatmap$yaxis")
                     }
                     heatmapColor
                   case _ => palette(t.label)

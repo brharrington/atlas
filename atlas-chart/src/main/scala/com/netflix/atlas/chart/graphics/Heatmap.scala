@@ -26,6 +26,20 @@ import com.netflix.spectator.api.histogram.PercentileBuckets
 import java.awt.Color
 import scala.collection.immutable.ArraySeq
 
+/**
+  * Helper for computing the heatmap counts based on the axis grid.
+  *
+  * @param settings
+  *     General settings to control the behavior.
+  * @param lines
+  *     Set of lines that contribute to the counts.
+  * @param xaxis
+  *     Time axis defining the count buckets over time.
+  * @param yaxis
+  *     Value axis defining the count buckets across the value range.
+  * @param canvasHeight
+  *     Used to compute the ticks on the value axis.
+  */
 case class Heatmap(
   settings: HeatmapDef,
   lines: List[LineDef],
@@ -36,6 +50,7 @@ case class Heatmap(
 
   require(lines.nonEmpty)
 
+  /** Step size used to traverse the data over time. */
   val step: Long = lines.head.data.data.step
 
   private val start = xaxis.start
@@ -44,14 +59,21 @@ case class Heatmap(
   private val minValue = yaxis.min
   private val maxValue = yaxis.max
 
+  /** Set of ticks on the values axis used to bucket the counts. */
   val yTicks: ArraySeq[ValueTick] = ArraySeq.unsafeWrapArray(yaxis.ticks(0, canvasHeight).toArray)
 
+  /** Palette for the colors associated with a count. */
   val palette: Palette = settings.palette.getOrElse {
     Palette.gradient(lines.head.color)
   }
 
   private val counts: Array[Array[Double]] = computeCounts()
 
+  /**
+    * Min and max count for the heatmap. The min will always be 0. The max will be the largest
+    * count for any cell rounded up to a significant boundary. It will be the actual max count
+    * even if the upper bound for presentation is different.
+    */
   val (minCount: Double, maxCount: Double) = {
     var max = Double.MinValue
     var i = 0
@@ -74,6 +96,7 @@ case class Heatmap(
     0
   )
 
+  /** Set of ticks for the color scale used in legends. */
   val colorTicks: ArraySeq[ValueTick] = {
     val numTicks = palette.colorArray.size
     val max = settings.upper.upper(hasArea = false, maxCount)
@@ -181,13 +204,16 @@ case class Heatmap(
     counts
   }
 
+  /** Number of buckets along the value axis. */
   def numberOfValueBuckets: Int = yTicks.length + 1
 
+  /** Return the count for the provided coordinates in the graph. */
   def count(t: Long, y: Int): Double = {
     val x = ((t - start) / step).toInt
     counts(x)(y)
   }
 
+  /** Return the color for the provided coordinates in the graph. */
   def color(t: Long, y: Int): Option[Color] = {
     val c = count(t, y)
     if (c > 0.0)
@@ -196,6 +222,7 @@ case class Heatmap(
       None
   }
 
+  /** Return the color for a count. */
   def color(c: Double): Color = {
     lookupColor(colorScale(boundedCount(c)))
   }
@@ -219,10 +246,12 @@ object Heatmap {
     builder.result()
   }
 
+  /** Check is a line is a part of a percentile heatmap. */
   def isPercentileHeatmap(line: LineDef): Boolean = {
     line.lineStyle == LineStyle.HEATMAP && line.data.tags.contains(TagKey.percentile)
   }
 
+  /** Get the range associated with a percentile bucket. */
   def percentileBucketRange(tags: Map[String, String]): Option[(Double, Double)] = {
     tags.get(TagKey.percentile).flatMap { s =>
       percentileRanges.get(s)

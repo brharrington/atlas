@@ -19,16 +19,10 @@ import java.awt.Color
 import java.awt.Graphics2D
 
 /**
-  * Draws a time series as a stepped line.
+  * Draws a heatmap.
   *
-  * @param style
-  *     Style to use for drawing the line.
-  * @param data
-  *     Lines that should be converted into a heatmap.
-  * @param xaxis
-  *     Axis used to create the X scale.
-  * @param yaxis
-  *     Axis used to create the Y scale.
+  * @param heatmap
+  *     Data that should be rendered.
   */
 case class TimeSeriesHeatmap(heatmap: Heatmap) extends Element {
 

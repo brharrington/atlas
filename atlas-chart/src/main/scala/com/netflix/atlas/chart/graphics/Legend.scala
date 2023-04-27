@@ -22,8 +22,13 @@ import com.netflix.atlas.chart.model.PlotDef
 /**
   * Draws a legend for a given plot.
   *
+  * @param styles
+  *     Styles for elements on the legend.
   * @param plot
   *     Plot definition corresponding to the legend.
+  * @param heatmap
+  *     Heatmap entry to show on the legend. There is at most one heatmap for a given
+  *     legend.
   * @param label
   *     Overall label to show for this legend.
   * @param showStats

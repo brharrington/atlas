@@ -25,14 +25,6 @@ import scala.collection.immutable.ArraySeq
 
 case class Palette(name: String, colorArray: ArraySeq[Color]) {
 
-  /*override def equals(obj: Any): Boolean = {
-    if (obj == null) return false
-    if (!obj.isInstanceOf[Palette]) return false
-    val other = obj.asInstanceOf[Palette]
-    if (!name.equals(other.name)) return false
-    colorArray.equals(other.colorArray)
-  }*/
-
   def withAlpha(alpha: Int): Palette =
     Palette(name, colorArray.map(c => new Color(c.getRed, c.getGreen, c.getBlue, alpha)))
 

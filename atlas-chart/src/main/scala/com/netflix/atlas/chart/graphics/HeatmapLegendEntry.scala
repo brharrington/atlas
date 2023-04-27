@@ -20,6 +20,18 @@ import com.netflix.atlas.chart.model.PlotDef
 import java.awt.Color
 import java.awt.Graphics2D
 
+/**
+  * Draws a legend entry for a heatmap.
+  *
+  * @param styles
+  *     Styles for elements on the legend entry.
+  * @param plot
+  *     Definition for the plot containing the line.
+  * @param data
+  *     Definition for the data element.
+  * @param showStats
+  *     If true then summary stats will be shown below the label for the line.
+  */
 case class HeatmapLegendEntry(styles: Styles, plot: PlotDef, data: Heatmap, showStats: Boolean)
     extends Element
     with FixedHeight {
@@ -62,7 +74,7 @@ case class HeatmapLegendEntry(styles: Styles, plot: PlotDef, data: Heatmap, show
       }
 
       // Axis lines
-      g.setColor(styles.line.color)
+      styles.line.configure(g)
       g.drawLine(x1 + indent, offset + d, x1 + indent + w * colors.length, offset + d)
 
       // Vertical ticks for color axis
@@ -72,6 +84,7 @@ case class HeatmapLegendEntry(styles: Styles, plot: PlotDef, data: Heatmap, show
       i = 0
       while (i < colorTicks.length) {
         val x = x1 + indent + w * i
+        styles.line.configure(g)
         g.drawLine(x, offset + d, x, offset + d + 4)
         if (spaceForTicks || i == 0 || i == colorTicks.length - 1) {
           // If space is limited, only show lables for first and last tick
