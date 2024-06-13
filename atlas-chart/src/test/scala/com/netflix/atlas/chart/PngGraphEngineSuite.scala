@@ -22,7 +22,6 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
-
 import com.netflix.atlas.chart.model.PlotBound.AutoData
 import com.netflix.atlas.chart.model.PlotBound.Explicit
 import com.netflix.atlas.chart.model._
@@ -151,8 +150,14 @@ abstract class PngGraphEngineSuite extends FunSuite {
   }
 
   def loadV2(resource: String): GraphDef = {
-    Using.resource(Streams.gzip(Streams.resource(resource))) { in =>
-      JsonCodec.decode(in)
+    if (resource.endsWith(".gz")) {
+      Using.resource(Streams.gzip(Streams.resource(resource))) { in =>
+        JsonCodec.decode(in)
+      }
+    } else {
+      Using.resource(Streams.resource(resource)) { in =>
+        JsonCodec.decode(in)
+      }
     }
   }
 
@@ -804,6 +809,27 @@ abstract class PngGraphEngineSuite extends FunSuite {
     check("heatmap_timer.png", graphDef)
   }
 
+  test("heatmap_timer_log") {
+    val graphDef = loadV2(s"$dataDir/heatmap_timer.json.gz").adjustPlots(
+      _.copy(scale = Scale.LOGARITHMIC)
+    )
+    check("heatmap_timer_log.png", graphDef)
+  }
+
+  test("heatmap_timer_power2") {
+    val graphDef = loadV2(s"$dataDir/heatmap_timer.json.gz").adjustPlots(
+      _.copy(scale = Scale.POWER_2)
+    )
+    check("heatmap_timer_power2.png", graphDef)
+  }
+
+  test("heatmap_timer_sqrt") {
+    val graphDef = loadV2(s"$dataDir/heatmap_timer.json.gz").adjustPlots(
+      _.copy(scale = Scale.SQRT)
+    )
+    check("heatmap_timer_sqrt.png", graphDef)
+  }
+
   test("heatmap_timer2") {
     val graphDef = loadV2(s"$dataDir/heatmap_timer2.json.gz")
     check("heatmap_timer2.png", graphDef)
@@ -880,9 +906,19 @@ abstract class PngGraphEngineSuite extends FunSuite {
     check("heatmap_timer_small.png", graphDef)
   }
 
+  test("heatmap_single_ptile") {
+    val graphDef = loadV2(s"$dataDir/heatmap_single_ptile.json.gz")
+    check("heatmap_single_ptile.png", graphDef)
+  }
+
   test("heatmap_dist") {
     val graphDef = loadV2(s"$dataDir/heatmap_dist.json.gz")
     check("heatmap_dist.png", graphDef)
+  }
+
+  test("heatmap_empty") {
+    val graphDef = loadV2(s"$dataDir/heatmap_empty.json.gz")
+    check("heatmap_empty.png", graphDef)
   }
 }
 

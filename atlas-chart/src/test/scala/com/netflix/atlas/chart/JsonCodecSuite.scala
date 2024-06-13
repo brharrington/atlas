@@ -16,11 +16,17 @@
 package com.netflix.atlas.chart
 
 import com.netflix.atlas.chart.model.GraphDef
+import com.netflix.atlas.chart.model.HeatmapDef
 import com.netflix.atlas.chart.model.LineDef
+import com.netflix.atlas.chart.model.LineStyle
+import com.netflix.atlas.chart.model.Palette
 import com.netflix.atlas.chart.model.PlotDef
+import com.netflix.atlas.core.model.ArrayTimeSeq
+import com.netflix.atlas.core.model.DsType
 import com.netflix.atlas.core.model.TimeSeries
 import munit.FunSuite
 
+import java.awt.Color
 import java.time.Instant
 
 class JsonCodecSuite extends FunSuite {
@@ -45,5 +51,95 @@ class JsonCodecSuite extends FunSuite {
     val gdef = graphDef(Set("no-image"))
     val str = JsonCodec.encode(gdef)
     assert(!str.contains(""""type":"graph-image""""))
+  }
+
+  private def generateHeatmap(
+    isPercentile: Boolean = false,
+    heatmapDef: Option[HeatmapDef]
+  ): GraphDef = {
+    val dpsA = new Array[Double](60)
+    java.util.Arrays.fill(dpsA, 1)
+    val dpsB = new Array[Double](60)
+    java.util.Arrays.fill(dpsB, 10)
+    val timeseries = if (isPercentile) {
+      List(
+        LineDef(
+          TimeSeries(
+            Map("percentile" -> "T0042"),
+            new ArrayTimeSeq(DsType.Gauge, 0L, 60_000, dpsA)
+          ),
+          lineStyle = LineStyle.HEATMAP
+        ),
+        LineDef(
+          TimeSeries(
+            Map("percentile" -> "T0048"),
+            new ArrayTimeSeq(DsType.Gauge, 0L, 60_000, dpsB)
+          ),
+          lineStyle = LineStyle.HEATMAP
+        )
+      )
+    } else {
+      List(
+        LineDef(
+          TimeSeries(
+            Map("series" -> "0"),
+            new ArrayTimeSeq(DsType.Gauge, 0L, 60_000, dpsA)
+          ),
+          lineStyle = LineStyle.HEATMAP
+        ),
+        LineDef(
+          TimeSeries(
+            Map("series" -> "1"),
+            new ArrayTimeSeq(DsType.Gauge, 0L, 60_000, dpsB)
+          ),
+          lineStyle = LineStyle.HEATMAP
+        )
+      )
+    }
+
+    val plotDef = PlotDef(
+      timeseries,
+      scale = PlotDef(List.empty).scale,
+      heatmap = heatmapDef
+    )
+
+    GraphDef(
+      List(plotDef),
+      Instant.ofEpochMilli(0L),
+      Instant.ofEpochMilli(3_600_000)
+    )
+  }
+
+  test("v2 heatmap") {
+    val gdef = generateHeatmap(heatmapDef =
+      Some(
+        HeatmapDef(
+          palette = Some(Palette.fromArray("heatmap", Array(Color.RED)))
+        )
+      )
+    )
+    val str = JsonCodec.encode(gdef)
+    assert(str.contains(""""type":"heatmap""""))
+    assert(str.contains(""""data":{"type":"heatmap""""))
+    assert(str.contains(""""label":"10.0""""))
+    val obtained = JsonCodec.decode(str)
+    assertEquals(obtained, gdef)
+  }
+
+  test("v2 percentile heatmap") {
+    val gdef = generateHeatmap(
+      true,
+      Some(
+        HeatmapDef(
+          palette = Some(Palette.fromArray("heatmap", Array(Color.RED)))
+        )
+      )
+    )
+    val str = JsonCodec.encode(gdef)
+    assert(str.contains(""""type":"heatmap""""))
+    assert(str.contains(""""data":{"type":"heatmap""""))
+    assert(str.contains(""""label":"percentile=T0048""""))
+    val obtained = JsonCodec.decode(str)
+    assertEquals(obtained, gdef)
   }
 }
