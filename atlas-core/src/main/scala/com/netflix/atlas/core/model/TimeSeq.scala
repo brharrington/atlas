@@ -214,6 +214,13 @@ class MapStepTimeSeq(ts: TimeSeq, val step: Long, cf: ConsolidationFunction) ext
   }
 }
 
+class StepViewTimeSeq(ts: TimeSeq, val step: Long) extends TimeSeq {
+
+  override def dsType: DsType = ts.dsType
+
+  override def apply(timestamp: Long): Double = ts(timestamp)
+}
+
 class UnaryOpTimeSeq(ts: TimeSeq, f: UnaryOp) extends TimeSeq {
 
   def dsType: DsType = ts.dsType
