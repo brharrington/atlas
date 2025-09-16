@@ -71,7 +71,10 @@ class MapStepTimeSeqSuite extends FunSuite {
 
   test("consolidate: sum with all NaN") {
     val s = Step.roundToStepBoundary(start, 2)
-    assertEquals(map(DsType.Gauge, 1, 2, Sum, Double.NaN, Double.NaN), gauge(s, 2, Double.NaN, Double.NaN))
+    assertEquals(
+      map(DsType.Gauge, 1, 2, Sum, Double.NaN, Double.NaN),
+      gauge(s, 2, Double.NaN, Double.NaN)
+    )
   }
 
   test("consolidate: avg") {
@@ -91,7 +94,10 @@ class MapStepTimeSeqSuite extends FunSuite {
 
   test("consolidate: avg with all NaN") {
     val s = Step.roundToStepBoundary(start, 2)
-    assertEquals(map(DsType.Gauge, 1, 2, Avg, Double.NaN, Double.NaN), gauge(s, 2, Double.NaN, Double.NaN))
+    assertEquals(
+      map(DsType.Gauge, 1, 2, Avg, Double.NaN, Double.NaN),
+      gauge(s, 2, Double.NaN, Double.NaN)
+    )
   }
 
   test("consolidate: min") {
@@ -106,7 +112,10 @@ class MapStepTimeSeqSuite extends FunSuite {
 
   test("consolidate: min with all NaN") {
     val s = Step.roundToStepBoundary(start, 2)
-    assertEquals(map(DsType.Gauge, 1, 2, Min, Double.NaN, Double.NaN), gauge(s, 2, Double.NaN, Double.NaN))
+    assertEquals(
+      map(DsType.Gauge, 1, 2, Min, Double.NaN, Double.NaN),
+      gauge(s, 2, Double.NaN, Double.NaN)
+    )
   }
 
   test("consolidate: max") {
@@ -121,12 +130,18 @@ class MapStepTimeSeqSuite extends FunSuite {
 
   test("consolidate: max with all NaN") {
     val s = Step.roundToStepBoundary(start, 2)
-    assertEquals(map(DsType.Gauge, 1, 2, Max, Double.NaN, Double.NaN), gauge(s, 2, Double.NaN, Double.NaN))
+    assertEquals(
+      map(DsType.Gauge, 1, 2, Max, Double.NaN, Double.NaN),
+      gauge(s, 2, Double.NaN, Double.NaN)
+    )
   }
 
   test("expand: sum") {
     val s = Step.roundToStepBoundary(start, 2)
-    assertEquals(map(DsType.Gauge, 2, 1, Sum, 1.0, 2.0), gauge(s, 1, 1.0, 2.0, 2.0, Double.NaN, Double.NaN))
+    assertEquals(
+      map(DsType.Gauge, 2, 1, Sum, 1.0, 2.0),
+      gauge(s, 1, 1.0, 2.0, 2.0, Double.NaN, Double.NaN)
+    )
   }
 
   test("expand: bad step") {
