@@ -9,6 +9,7 @@ lazy val atlas = project.in(file("."))
     `atlas-eval`,
     `atlas-jmh`,
     `atlas-json3`,
+    `atlas-lsp`,
     `atlas-lwcapi`,
     `atlas-lwc-events`,
     `atlas-postgres`,
@@ -88,6 +89,13 @@ lazy val `atlas-json3` = project
     Dependencies.jacksonMapper,
     Dependencies.jacksonScala,
     Dependencies.jacksonSmile
+  ))
+
+lazy val `atlas-lsp` = project
+  .configure(BuildSettings.profile)
+  .dependsOn(`atlas-core`)
+  .settings(libraryDependencies ++= Seq(
+    Dependencies.lsp4j
   ))
 
 lazy val `atlas-lwcapi` = project
