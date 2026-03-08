@@ -13,15 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.netflix.atlas.lsp
+package com.netflix.atlas.lsp;
 
-import org.eclipse.lsp4j.DidChangeConfigurationParams
-import org.eclipse.lsp4j.DidChangeWatchedFilesParams
-import org.eclipse.lsp4j.services.WorkspaceService
+import org.eclipse.lsp4j.DidChangeConfigurationParams;
+import org.eclipse.lsp4j.DidChangeWatchedFilesParams;
+import org.eclipse.lsp4j.services.WorkspaceService;
 
-class AtlasWorkspaceService extends WorkspaceService {
+/**
+ * Workspace service implementation. Written in Java to avoid Scala/JDK annotation
+ * interop issues with LSP4j.
+ */
+public class AtlasWorkspaceService implements WorkspaceService {
 
-  override def didChangeConfiguration(params: DidChangeConfigurationParams): Unit = {}
+    @Override
+    public void didChangeConfiguration(DidChangeConfigurationParams params) {}
 
-  override def didChangeWatchedFiles(params: DidChangeWatchedFilesParams): Unit = {}
+    @Override
+    public void didChangeWatchedFiles(DidChangeWatchedFilesParams params) {}
 }

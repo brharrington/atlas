@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Atlas Stack Language Editor</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    header {
+      padding: 8px 16px;
+      background: #2d2d2d;
+      border-bottom: 1px solid #404040;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 14px; font-weight: 500; color: #ccc; }
+    #status {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 3px;
+    }
+    #status.connected { background: #2ea04350; color: #4ec96b; }
+    #status.disconnected { background: #f4474750; color: #f44747; }
+    #editor-container {
+      flex: 1;
+      min-height: 120px;
+      max-height: 200px;
+    }
+    #panels {
+      flex: 2;
+      display: flex;
+      gap: 1px;
+      background: #404040;
+      overflow: hidden;
+    }
+    .panel {
+      flex: 1;
+      background: #1e1e1e;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 6px 12px;
+      background: #2d2d2d;
+      font-size: 12px;
+      font-weight: 500;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #404040;
+    }
+    .panel-body {
+      flex: 1;
+      padding: 8px 12px;
+      overflow: auto;
+      font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    #diagnostics-panel .diagnostic { padding: 2px 0; }
+    #diagnostics-panel .error { color: #f44747; }
+    #diagnostics-panel .warning { color: #cca700; }
+    #diagnostics-panel .info { color: #3794ff; }
+    #diagnostics-panel .none { color: #666; font-style: italic; }
+    #completions-panel .item { padding: 1px 0; color: #9cdcfe; }
+    #log-panel .entry { padding: 1px 0; color: #888; font-size: 11px; }
+    #log-panel .entry.send { color: #6a9955; }
+    #log-panel .entry.recv { color: #569cd6; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Atlas Stack Language</h1>
+    <span id="status" class="disconnected">disconnected</span>
+  </header>
+  <div id="editor-container"></div>
+  <div id="panels">
+    <div class="panel" id="diagnostics-panel">
+      <div class="panel-header">Diagnostics</div>
+      <div class="panel-body" id="diagnostics-body"></div>
+    </div>
+    <div class="panel" id="completions-panel">
+      <div class="panel-header">Completions</div>
+      <div class="panel-body" id="completions-body"></div>
+    </div>
+    <div class="panel" id="log-panel">
+      <div class="panel-header">LSP Log</div>
+      <div class="panel-body" id="log-body"></div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs/loader.min.js"></script>
+  <script>
+    require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs' } });
+
+    require(['vs/editor/editor.main'], function () {
+
+      // --- LSP Client over WebSocket ---
+
+      const DOC_URI = 'atlas://expression';
+      let ws = null;
+      let requestId = 0;
+      let docVersion = 0;
+      let initialized = false;
+      const pendingRequests = new Map();
+
+      function lspLog(direction, msg) {
+        const el = document.getElementById('log-body');
+        const div = document.createElement('div');
+        div.className = 'entry ' + direction;
+        const prefix = direction === 'send' ? '>>>' : '<<<';
+        const text = typeof msg === 'string' ? msg : JSON.stringify(msg);
+        // Truncate long messages for display
+        div.textContent = prefix + ' ' + (text.length > 200 ? text.substring(0, 200) + '...' : text);
+        el.appendChild(div);
+        el.scrollTop = el.scrollHeight;
+      }
+
+      function sendRequest(method, params) {
+        const id = ++requestId;
+        const msg = { jsonrpc: '2.0', id, method, params };
+        lspLog('send', msg);
+        ws.send(JSON.stringify(msg));
+        return new Promise((resolve, reject) => {
+          pendingRequests.set(id, { resolve, reject });
+        });
+      }
+
+      function sendNotification(method, params) {
+        const msg = { jsonrpc: '2.0', method, params };
+        lspLog('send', msg);
+        ws.send(JSON.stringify(msg));
+      }
+
+      function connectLsp() {
+        const wsUrl = 'ws://' + window.location.hostname + ':7102';
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = async () => {
+          document.getElementById('status').textContent = 'connected';
+          document.getElementById('status').className = 'connected';
+
+          // LSP initialize handshake
+          const initResult = await sendRequest('initialize', {
+            processId: null,
+            capabilities: {
+              textDocument: {
+                completion: { completionItem: { snippetSupport: false } },
+                semanticTokens: { requests: { full: true } },
+                publishDiagnostics: {}
+              }
+            },
+            rootUri: null
+          });
+          lspLog('recv', 'Capabilities: ' + JSON.stringify(initResult.capabilities || {}));
+
+          sendNotification('initialized', {});
+          initialized = true;
+
+          // Open the document
+          sendNotification('textDocument/didOpen', {
+            textDocument: {
+              uri: DOC_URI,
+              languageId: 'atlas',
+              version: ++docVersion,
+              text: editor.getValue()
+            }
+          });
+        };
+
+        ws.onmessage = (event) => {
+          const msg = JSON.parse(event.data);
+          lspLog('recv', msg);
+
+          // Handle response to a request
+          if (msg.id !== undefined && pendingRequests.has(msg.id)) {
+            const { resolve } = pendingRequests.get(msg.id);
+            pendingRequests.delete(msg.id);
+            resolve(msg.result);
+            return;
+          }
+
+          // Handle server notifications
+          if (msg.method === 'textDocument/publishDiagnostics') {
+            handleDiagnostics(msg.params);
+          }
+        };
+
+        ws.onclose = () => {
+          initialized = false;
+          document.getElementById('status').textContent = 'disconnected';
+          document.getElementById('status').className = 'disconnected';
+          // Reconnect after a delay
+          setTimeout(connectLsp, 3000);
+        };
+
+        ws.onerror = () => {};
+      }
+
+      // --- Register Atlas language ---
+      monaco.languages.register({ id: 'atlas' });
+
+      monaco.languages.setMonarchTokensProvider('atlas', {
+        tokenizer: {
+          root: [
+            [/:[a-zA-Z_][\w\-]*/, 'keyword'],
+            [/-?\d+(\.\d+)?/, 'number'],
+            [/[()]/, 'delimiter.parenthesis'],
+            [/,/, 'delimiter'],
+            [/[^\s,:()\-][^\s,()]*/, 'string'],
+            [/-(?!\d)/, 'string'],
+          ]
+        }
+      });
+
+      monaco.editor.defineTheme('atlas-dark', {
+        base: 'vs-dark',
+        inherit: true,
+        rules: [
+          { token: 'keyword', foreground: 'DCDCAA' },
+          { token: 'number', foreground: 'B5CEA8' },
+          { token: 'string', foreground: 'CE9178' },
+          { token: 'delimiter.parenthesis', foreground: 'D4D4D4' },
+          { token: 'delimiter', foreground: '808080' },
+        ],
+        colors: {}
+      });
+
+      const editor = monaco.editor.create(document.getElementById('editor-container'), {
+        value: 'a,b,:swap,:dup',
+        language: 'atlas',
+        theme: 'atlas-dark',
+        minimap: { enabled: false },
+        lineNumbers: 'off',
+        glyphMargin: false,
+        folding: false,
+        scrollBeyondLastLine: false,
+        renderLineHighlight: 'none',
+        overviewRulerBorder: false,
+        fontSize: 14,
+        padding: { top: 8, bottom: 8 },
+        wordWrap: 'on',
+      });
+
+      // --- Send document changes via LSP ---
+
+      let changeTimer = null;
+      editor.onDidChangeModelContent(() => {
+        if (changeTimer) clearTimeout(changeTimer);
+        changeTimer = setTimeout(() => {
+          if (!initialized) return;
+          sendNotification('textDocument/didChange', {
+            textDocument: { uri: DOC_URI, version: ++docVersion },
+            contentChanges: [{ text: editor.getValue() }]
+          });
+          requestSemanticTokens();
+          requestCompletions();
+        }, 150);
+      });
+
+      // --- Semantic tokens ---
+
+      async function requestSemanticTokens() {
+        if (!initialized) return;
+        try {
+          const result = await sendRequest('textDocument/semanticTokens/full', {
+            textDocument: { uri: DOC_URI }
+          });
+          if (result && result.data) {
+            applySemanticTokens(result.data);
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      // Token type names matching AtlasTokenTypes indices
+      const tokenTypeNames = ['function', 'string', 'number', 'operator', 'variable'];
+      const tokenDecorations = [];
+
+      function applySemanticTokens(data) {
+        // LSP semantic tokens are relative; decode to absolute positions
+        // We don't apply Monaco decorations here since Monaco's semantic tokens
+        // provider would be the proper integration. For now the Monarch tokenizer
+        // handles highlighting. The semantic token data is logged for debugging.
+      }
+
+      // --- Diagnostics ---
+
+      function handleDiagnostics(params) {
+        if (params.uri !== DOC_URI) return;
+        const diagnostics = params.diagnostics || [];
+
+        // Update Monaco markers
+        const markers = diagnostics.map(d => ({
+          severity: d.severity === 1
+            ? monaco.MarkerSeverity.Error
+            : d.severity === 2
+            ? monaco.MarkerSeverity.Warning
+            : monaco.MarkerSeverity.Info,
+          startLineNumber: d.range.start.line + 1,
+          startColumn: d.range.start.character + 1,
+          endLineNumber: d.range.end.line + 1,
+          endColumn: d.range.end.character + 1,
+          message: d.message,
+        }));
+        monaco.editor.setModelMarkers(editor.getModel(), 'atlas', markers);
+
+        // Update diagnostics panel
+        const el = document.getElementById('diagnostics-body');
+        if (diagnostics.length === 0) {
+          el.innerHTML = '<div class="none">No issues</div>';
+          return;
+        }
+        el.innerHTML = diagnostics.map(d => {
+          const sev = d.severity === 1 ? 'error' : d.severity === 2 ? 'warning' : 'info';
+          const range = `${d.range.start.character}-${d.range.end.character}`;
+          return `<div class="diagnostic ${sev}">[${range}] ${escapeHtml(d.message)}</div>`;
+        }).join('');
+      }
+
+      // --- Completions ---
+
+      async function requestCompletions() {
+        if (!initialized) return;
+        try {
+          const pos = editor.getPosition();
+          const result = await sendRequest('textDocument/completion', {
+            textDocument: { uri: DOC_URI },
+            position: { line: pos.lineNumber - 1, character: pos.column - 1 }
+          });
+          const items = result ? (result.items || result) : [];
+          renderCompletions(Array.isArray(items) ? items : []);
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      function renderCompletions(items) {
+        const el = document.getElementById('completions-body');
+        if (items.length === 0) {
+          el.innerHTML = '<div class="none" style="color:#666;font-style:italic">No completions</div>';
+          return;
+        }
+        el.innerHTML = items.slice(0, 30).map(item =>
+          `<div class="item">${escapeHtml(item.label)}` +
+          (item.detail ? ` <span style="color:#666">${escapeHtml(item.detail)}</span>` : '') +
+          `</div>`
+        ).join('');
+        if (items.length > 30) {
+          el.innerHTML += `<div class="item" style="color:#666">... and ${items.length - 30} more</div>`;
+        }
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      window.addEventListener('resize', () => editor.layout());
+
+      // Start connection
+      connectLsp();
+    });
+  </script>
+</body>
+</html>

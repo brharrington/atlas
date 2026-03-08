@@ -22,6 +22,7 @@ import org.eclipse.lsp4j.CompletionParams
 import org.eclipse.lsp4j.DidOpenTextDocumentParams
 import org.eclipse.lsp4j.InitializeParams
 import org.eclipse.lsp4j.Position
+import org.eclipse.lsp4j.SemanticTokensParams
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.TextDocumentItem
 
@@ -103,5 +104,97 @@ class AtlasLspServerSuite extends FunSuite {
     val swap = items.find(_.getLabel == ":swap").get
     assertNotEquals(swap.getDetail, null)
     assertNotEquals(swap.getDocumentation, null)
+  }
+
+  //
+  // semantic tokens
+  //
+
+  private def requestSemanticTokens(
+    server: AtlasLspServer,
+    uri: String
+  ): List[Int] = {
+    val params = new SemanticTokensParams
+    params.setTextDocument(new TextDocumentIdentifier(uri))
+    val result = server.getTextDocumentService.semanticTokensFull(params).get()
+    result.getData.asScala.map(_.intValue()).toList
+  }
+
+  /** Decode the raw LSP integer array into (start, length, tokenType) tuples. */
+  private def decodeTokens(data: List[Int]): List[(Int, Int, Int)] = {
+    var pos = 0
+    data.grouped(5).map { group =>
+      pos += group(1) // deltaStart (deltaLine is always 0)
+      (pos, group(2), group(3)) // (absoluteStart, length, tokenType)
+    }.toList
+  }
+
+  test("initialize enables semantic tokens") {
+    val server = newServer
+    val result = server.initialize(new InitializeParams).get()
+    assertNotEquals(result.getCapabilities.getSemanticTokensProvider, null)
+  }
+
+  test("semantic tokens: literals classified as string") {
+    val server = newServer
+    val uri = "expr:st1"
+    openDocument(server, uri, "abc")
+    val tokens = decodeTokens(requestSemanticTokens(server, uri))
+    assertEquals(tokens.size, 1)
+    assertEquals(tokens.head, (0, 3, AtlasTokenTypes.String))
+  }
+
+  test("semantic tokens: numeric literal") {
+    val server = newServer
+    val uri = "expr:st2"
+    openDocument(server, uri, "42")
+    val tokens = decodeTokens(requestSemanticTokens(server, uri))
+    assertEquals(tokens.size, 1)
+    assertEquals(tokens.head, (0, 2, AtlasTokenTypes.Number))
+  }
+
+  test("semantic tokens: known word") {
+    val server = newServer
+    val uri = "expr:st3"
+    openDocument(server, uri, "a,b,:swap")
+    val tokens = decodeTokens(requestSemanticTokens(server, uri))
+    assertEquals(tokens.size, 3)
+    // "a" at 0, "b" at 2, ":swap" at 4
+    assertEquals(tokens(0), (0, 1, AtlasTokenTypes.String))
+    assertEquals(tokens(1), (2, 1, AtlasTokenTypes.String))
+    assertEquals(tokens(2), (4, 5, AtlasTokenTypes.Word))
+  }
+
+  test("semantic tokens: unknown word") {
+    val server = newServer
+    val uri = "expr:st4"
+    openDocument(server, uri, "a,:unknown")
+    val tokens = decodeTokens(requestSemanticTokens(server, uri))
+    assertEquals(tokens.size, 2)
+    assertEquals(tokens(1)._3, AtlasTokenTypes.UnknownWord)
+  }
+
+  test("semantic tokens: list with parentheses") {
+    val server = newServer
+    val uri = "expr:st5"
+    openDocument(server, uri, "(,a,b,)")
+    val tokens = decodeTokens(requestSemanticTokens(server, uri))
+    // ( at 0, a at 2, b at 4, ) at 6
+    assertEquals(tokens.size, 4)
+    assertEquals(tokens(0)._3, AtlasTokenTypes.Parenthesis)
+    assertEquals(tokens(1)._3, AtlasTokenTypes.String)
+    assertEquals(tokens(2)._3, AtlasTokenTypes.String)
+    assertEquals(tokens(3)._3, AtlasTokenTypes.Parenthesis)
+  }
+
+  test("semantic tokens: mixed expression") {
+    val server = newServer
+    val uri = "expr:st6"
+    openDocument(server, uri, "42,hello,:dup")
+    val tokens = decodeTokens(requestSemanticTokens(server, uri))
+    assertEquals(tokens.size, 3)
+    assertEquals(tokens(0)._3, AtlasTokenTypes.Number)
+    assertEquals(tokens(1)._3, AtlasTokenTypes.String)
+    assertEquals(tokens(2)._3, AtlasTokenTypes.Word)
   }
 }

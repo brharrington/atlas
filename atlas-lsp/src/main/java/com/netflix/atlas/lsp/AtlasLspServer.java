@@ -1,0 +1,103 @@
+/*
+ * Copyright 2014-2026 Netflix, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.netflix.atlas.lsp;
+
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
+
+import com.netflix.atlas.core.stacklang.Interpreter;
+import com.netflix.atlas.core.stacklang.Vocabulary;
+import org.eclipse.lsp4j.CompletionOptions;
+import org.eclipse.lsp4j.InitializeParams;
+import org.eclipse.lsp4j.InitializeResult;
+import org.eclipse.lsp4j.SemanticTokensWithRegistrationOptions;
+import org.eclipse.lsp4j.ServerCapabilities;
+import org.eclipse.lsp4j.services.LanguageClient;
+import org.eclipse.lsp4j.services.LanguageClientAware;
+import org.eclipse.lsp4j.services.LanguageServer;
+import org.eclipse.lsp4j.services.TextDocumentService;
+import org.eclipse.lsp4j.services.WorkspaceService;
+
+/**
+ * Atlas LSP server implementation. Written in Java to avoid Scala compiler
+ * issues with LSP4j annotation propagation on bridge methods.
+ */
+public class AtlasLspServer implements LanguageServer, LanguageClientAware {
+
+    private final AtomicReference<LanguageClient> clientRef = new AtomicReference<>();
+
+    private final Interpreter interpreter;
+    private final AtlasTextDocumentService textDocService;
+    private final AtlasWorkspaceService workspaceService;
+
+    private final AtlasDocumentAnalyzer analyzer;
+
+    public AtlasLspServer(Vocabulary vocabulary) {
+        this.interpreter = Interpreter.apply(vocabulary.allWords());
+        this.analyzer = new AtlasDocumentAnalyzer(interpreter, this::client);
+        this.textDocService = new AtlasTextDocumentService(analyzer);
+        this.workspaceService = new AtlasWorkspaceService();
+    }
+
+    public AtlasDocumentAnalyzer analyzer() {
+        return analyzer;
+    }
+
+    public LanguageClient client() {
+        return clientRef.get();
+    }
+
+    public Interpreter interpreter() {
+        return interpreter;
+    }
+
+    @Override
+    public CompletableFuture<InitializeResult> initialize(InitializeParams params) {
+        var capabilities = new ServerCapabilities();
+        var completionOptions = new CompletionOptions();
+        completionOptions.setTriggerCharacters(List.of(",", ":"));
+        capabilities.setCompletionProvider(completionOptions);
+        var semanticTokensOptions = new SemanticTokensWithRegistrationOptions();
+        semanticTokensOptions.setLegend(AtlasTokenTypes.legend());
+        semanticTokensOptions.setFull(true);
+        capabilities.setSemanticTokensProvider(semanticTokensOptions);
+        return CompletableFuture.completedFuture(new InitializeResult(capabilities));
+    }
+
+    @Override
+    public CompletableFuture<Object> shutdown() {
+        return CompletableFuture.completedFuture(null);
+    }
+
+    @Override
+    public void exit() {}
+
+    @Override
+    public TextDocumentService getTextDocumentService() {
+        return textDocService;
+    }
+
+    @Override
+    public WorkspaceService getWorkspaceService() {
+        return workspaceService;
+    }
+
+    @Override
+    public void connect(LanguageClient client) {
+        clientRef.set(client);
+    }
+}

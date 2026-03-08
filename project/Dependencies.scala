@@ -41,6 +41,7 @@ object Dependencies {
   val jacksonMapper     = "tools.jackson.core" % "jackson-databind" % jackson
   val jacksonScala      = "tools.jackson.module" %% "jackson-module-scala" % jackson
   val jacksonSmile      = "tools.jackson.dataformat" % "jackson-dataformat-smile" % jackson
+  val javaWebSocket     = "org.java-websocket" % "Java-WebSocket" % "1.6.0"
   val jol               = "org.openjdk.jol" % "jol-core" % "0.17"
   val jsr305            = "com.google.code.findbugs" % "jsr305" % "3.0.2"
   val log4jApi          = "org.apache.logging.log4j" % "log4j-api" % log4j
