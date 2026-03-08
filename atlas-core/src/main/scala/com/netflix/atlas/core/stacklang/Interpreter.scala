@@ -15,6 +15,7 @@
  */
 package com.netflix.atlas.core.stacklang
 
+import com.netflix.atlas.core.stacklang.ast.*
 import com.netflix.atlas.core.util.Features
 import com.netflix.atlas.core.util.Strings
 
@@ -155,6 +156,128 @@ case class Interpreter(vocabulary: List[Word]) {
 
   final def debug(program: String): List[Step] = {
     debug(splitAndTrim(program))
+  }
+
+  /**
+    * Build a syntax tree for the given expression string. Unlike `execute`, this method
+    * recovers from errors and continues processing, collecting diagnostics for each
+    * problem encountered. The resulting tree contains position information for all tokens,
+    * resolved word references, and the stack state at each point.
+    */
+  final def syntaxTree(
+    str: String,
+    vars: Map[String, Any] = Map.empty
+  ): SyntaxTree = {
+    val tokens = Interpreter.tokenize(str)
+    val diagnostics = List.newBuilder[Diagnostic]
+    var stack: List[Any] = Nil
+    val context = Context(this, Nil, vars, vars, features = Features.UNSTABLE)
+
+    def buildNodes(ts: List[Token]): (List[SyntaxNode], List[Token]) = {
+      val nodes = List.newBuilder[SyntaxNode]
+      var remaining = ts
+      var currentStack = stack
+
+      while (remaining.nonEmpty) {
+        val token = remaining.head
+        remaining = remaining.tail
+        token.value match {
+          case "(" =>
+            val (children, rest) = buildListChildren(remaining)
+            val closeToken = rest.headOption.filter(_.value == ")")
+            val diag = if (closeToken.isEmpty) {
+              val d = Diagnostic(token.span, "unmatched opening parenthesis", Severity.Error)
+              diagnostics += d
+              Some(d)
+            } else None
+            // Build the list value from children (strings only, not executed)
+            val listValues = children.map {
+              case LiteralNode(t) => t.value
+              case WordNode(t, _, _, _) => s":${t.value.stripPrefix(":")}"
+              case n => n.toString
+            }
+            currentStack = listValues :: currentStack
+            stack = currentStack
+            val node = ListNode(token, children, closeToken, diag)
+            nodes += node
+            remaining = if (closeToken.isDefined) rest.tail else rest
+          case ")" =>
+            val d = Diagnostic(token.span, "unmatched closing parenthesis", Severity.Error)
+            diagnostics += d
+            nodes += LiteralNode(token)
+            // Don't update the stack for unmatched close paren
+          case v if v.startsWith(":") =>
+            val name = v.substring(1)
+            val stackBefore = currentStack
+            words.get(name) match {
+              case None =>
+                val d = Diagnostic(token.span, s"unknown word ':$name'", Severity.Error)
+                diagnostics += d
+                nodes += WordNode(token, None, stackBefore, Some(d))
+              case Some(ws) =>
+                val ctx = context.copy(stack = currentStack)
+                try {
+                  val result = executeFirstMatchingWord(name, ws, ctx)
+                  val matched = ws.find(_.matches(currentStack))
+                  currentStack = result.stack
+                  stack = currentStack
+                  val diag = matched.filter(!_.isStable).map { w =>
+                    val d = Diagnostic(token.span, s":${w.name} is unstable", Severity.Warning)
+                    diagnostics += d
+                    d
+                  }
+                  nodes += WordNode(token, matched, stackBefore, diag)
+                } catch {
+                  case e: Exception =>
+                    val d = Diagnostic(token.span, e.getMessage, Severity.Error)
+                    diagnostics += d
+                    nodes += WordNode(token, None, stackBefore, Some(d))
+                }
+            }
+          case v =>
+            currentStack = Interpreter.unescape(v) :: currentStack
+            stack = currentStack
+            nodes += LiteralNode(token)
+        }
+      }
+      (nodes.result(), remaining)
+    }
+
+    def buildListChildren(ts: List[Token]): (List[SyntaxNode], List[Token]) = {
+      val nodes = List.newBuilder[SyntaxNode]
+      var remaining = ts
+      var depth = 0
+
+      while (remaining.nonEmpty) {
+        val token = remaining.head
+        token.value match {
+          case ")" if depth == 0 =>
+            return (nodes.result(), remaining)
+          case "(" =>
+            remaining = remaining.tail
+            depth += 1
+            // Nested list: recurse
+            val (children, rest) = buildListChildren(remaining)
+            val closeToken = rest.headOption.filter(_.value == ")")
+            val node = ListNode(token, children, closeToken, None)
+            nodes += node
+            remaining = if (closeToken.isDefined) rest.tail else rest
+            if (closeToken.isDefined) depth -= 1
+          case ")" if depth > 0 =>
+            remaining = remaining.tail
+            depth -= 1
+            // Return this level
+            return (nodes.result(), remaining)
+          case _ =>
+            remaining = remaining.tail
+            nodes += LiteralNode(token)
+        }
+      }
+      (nodes.result(), remaining)
+    }
+
+    val (nodes, _) = buildNodes(tokens)
+    SyntaxTree(str, nodes, diagnostics.result(), stack)
   }
 
   /**
@@ -353,5 +476,31 @@ object Interpreter {
   def unescape(value: Any): Any = value match {
     case s: String => Strings.unescape(s)
     case v         => v
+  }
+
+  /**
+    * Split the input string on commas and trim whitespace, returning tokens with their
+    * character positions in the original string. This mirrors the behavior of `splitAndTrim`
+    * but preserves position information for use in syntax tree construction.
+    */
+  def tokenize(str: String): List[Token] = {
+    val builder = List.newBuilder[Token]
+    var segStart = 0
+    var i = 0
+    while (i <= str.length) {
+      if (i == str.length || str.charAt(i) == ',') {
+        // Find trimmed content within this segment
+        var s = segStart
+        var e = i
+        while (s < e && Character.isWhitespace(str.charAt(s))) s += 1
+        while (e > s && Character.isWhitespace(str.charAt(e - 1))) e -= 1
+        if (s < e) {
+          builder += Token(str.substring(s, e), Span(s, e))
+        }
+        segStart = i + 1
+      }
+      i += 1
+    }
+    builder.result()
   }
 }

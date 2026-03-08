@@ -15,6 +15,9 @@
  */
 package com.netflix.atlas.core.stacklang
 
+import com.netflix.atlas.core.stacklang.ast.DataType
+import com.netflix.atlas.core.stacklang.ast.Parameter
+
 /**
   * A small procedure that manipulates the stack.
   */
@@ -33,6 +36,18 @@ trait Word {
     * Set of examples showing the usage of the word.
     */
   def examples: List[String]
+
+  /**
+    * Structured parameter declarations for this word. When non-empty, these describe the
+    * types expected on the stack in user-facing order (deepest item first). Used by the
+    * LSP for parameter hints and type-aware completions.
+    */
+  def parameters: List[Parameter] = Nil
+
+  /**
+    * The output type produced by this word, if known.
+    */
+  def outputType: Option[DataType] = None
 
   /**
     * Returns true if this operation is considered stable. New operations should override

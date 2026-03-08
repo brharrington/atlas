@@ -1,0 +1,241 @@
+/*
+ * Copyright 2014-2026 Netflix, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.netflix.atlas.core.stacklang
+
+import com.netflix.atlas.core.stacklang.ast.*
+import munit.FunSuite
+
+class SyntaxTreeSuite extends FunSuite {
+
+  private val interpreter = Interpreter(StandardVocabulary.allWords)
+
+  //
+  // tokenize
+  //
+
+  test("tokenize: simple tokens") {
+    val tokens = Interpreter.tokenize("a,b,c")
+    assertEquals(tokens.map(_.value), List("a", "b", "c"))
+    assertEquals(tokens.map(_.span), List(Span(0, 1), Span(2, 3), Span(4, 5)))
+  }
+
+  test("tokenize: whitespace trimming preserves position") {
+    val tokens = Interpreter.tokenize("  a , b , c  ")
+    assertEquals(tokens.map(_.value), List("a", "b", "c"))
+    assertEquals(tokens(0).span, Span(2, 3))
+    assertEquals(tokens(1).span, Span(6, 7))
+    assertEquals(tokens(2).span, Span(10, 11))
+  }
+
+  test("tokenize: empty segments skipped") {
+    val tokens = Interpreter.tokenize("a,,b,  ,c")
+    assertEquals(tokens.map(_.value), List("a", "b", "c"))
+  }
+
+  test("tokenize: leading and trailing commas") {
+    val tokens = Interpreter.tokenize(",a,b,")
+    assertEquals(tokens.map(_.value), List("a", "b"))
+  }
+
+  test("tokenize: empty string") {
+    assertEquals(Interpreter.tokenize(""), Nil)
+  }
+
+  test("tokenize: word tokens") {
+    val tokens = Interpreter.tokenize("a,:dup,:swap")
+    assertEquals(tokens.map(_.value), List("a", ":dup", ":swap"))
+    assertEquals(tokens(1).span, Span(2, 6))
+    assertEquals(tokens(2).span, Span(7, 12))
+  }
+
+  test("tokenize: consistent with splitAndTrim values") {
+    val exprs = List(
+      "a,b,c",
+      "  a , b ",
+      ":dup,:swap",
+      "(,a,b,)",
+      ",,a,,b,,"
+    )
+    exprs.foreach { expr =>
+      val tokenValues = Interpreter.tokenize(expr).map(_.value)
+      val splitValues = Interpreter.splitAndTrim(expr)
+      assertEquals(tokenValues, splitValues, s"mismatch for: $expr")
+    }
+  }
+
+  //
+  // syntaxTree: literals
+  //
+
+  test("syntaxTree: single literal") {
+    val tree = interpreter.syntaxTree("a")
+    assertEquals(tree.nodes.size, 1)
+    assert(tree.nodes.head.isInstanceOf[LiteralNode])
+    assertEquals(tree.diagnostics, Nil)
+    assertEquals(tree.stack, List("a"))
+  }
+
+  test("syntaxTree: multiple literals") {
+    val tree = interpreter.syntaxTree("a,b,c")
+    assertEquals(tree.nodes.size, 3)
+    assert(tree.nodes.forall(_.isInstanceOf[LiteralNode]))
+    assertEquals(tree.stack, List("c", "b", "a"))
+  }
+
+  //
+  // syntaxTree: words
+  //
+
+  test("syntaxTree: known word") {
+    val tree = interpreter.syntaxTree("a,b,:swap")
+    assertEquals(tree.nodes.size, 3)
+    val wordNode = tree.nodes(2).asInstanceOf[WordNode]
+    assert(wordNode.word.isDefined)
+    assertEquals(wordNode.word.get.name, "swap")
+    assertEquals(wordNode.stack, List("b", "a")) // stack before execution
+    assertEquals(wordNode.diagnostic, None)
+    assertEquals(tree.stack, List("a", "b")) // stack after swap
+  }
+
+  test("syntaxTree: word node has correct span") {
+    val tree = interpreter.syntaxTree("a,b,:swap")
+    val wordNode = tree.nodes(2).asInstanceOf[WordNode]
+    assertEquals(wordNode.span, Span(4, 9))
+  }
+
+  //
+  // syntaxTree: error recovery
+  //
+
+  test("syntaxTree: unknown word produces diagnostic and continues") {
+    val tree = interpreter.syntaxTree("a,:unknown,b")
+    assertEquals(tree.nodes.size, 3)
+    val wordNode = tree.nodes(1).asInstanceOf[WordNode]
+    assertEquals(wordNode.word, None)
+    assert(wordNode.diagnostic.isDefined)
+    assert(wordNode.diagnostic.get.message.contains("unknown word"))
+    assertEquals(wordNode.diagnostic.get.severity, Severity.Error)
+    // Processing continued: "b" was still pushed
+    assertEquals(tree.stack, List("b", "a"))
+    assertEquals(tree.diagnostics.size, 1)
+  }
+
+  test("syntaxTree: stack mismatch produces diagnostic and continues") {
+    // :swap requires 2 items, only 1 on stack
+    val tree = interpreter.syntaxTree("a,:swap,b")
+    assertEquals(tree.nodes.size, 3)
+    val wordNode = tree.nodes(1).asInstanceOf[WordNode]
+    assert(wordNode.diagnostic.isDefined)
+    assertEquals(wordNode.diagnostic.get.severity, Severity.Error)
+    // Processing continued
+    assertEquals(tree.stack, List("b", "a"))
+    assertEquals(tree.diagnostics.size, 1)
+  }
+
+  //
+  // syntaxTree: lists
+  //
+
+  test("syntaxTree: simple list") {
+    val tree = interpreter.syntaxTree("(,a,b,)")
+    assertEquals(tree.nodes.size, 1)
+    val listNode = tree.nodes.head.asInstanceOf[ListNode]
+    assert(listNode.close.isDefined)
+    assertEquals(listNode.children.size, 2)
+    assertEquals(listNode.diagnostic, None)
+    // List should be on the stack
+    assertEquals(tree.stack, List(List("a", "b")))
+  }
+
+  test("syntaxTree: unmatched opening paren") {
+    val tree = interpreter.syntaxTree("(,a,b")
+    assertEquals(tree.diagnostics.size, 1)
+    assert(tree.diagnostics.head.message.contains("unmatched opening parenthesis"))
+  }
+
+  test("syntaxTree: unmatched closing paren") {
+    val tree = interpreter.syntaxTree("a,)")
+    assertEquals(tree.diagnostics.size, 1)
+    assert(tree.diagnostics.head.message.contains("unmatched closing parenthesis"))
+  }
+
+  //
+  // syntaxTree: round-trip consistency with execute
+  //
+
+  test("syntaxTree: final stack matches execute for valid expressions") {
+    val exprs = List(
+      "a,b,c",
+      "a,b,:swap",
+      "a,:dup",
+      "a,b,:swap,:dup",
+      "(,a,b,)"
+    )
+    exprs.foreach { expr =>
+      val tree = interpreter.syntaxTree(expr)
+      val ctx = interpreter.execute(expr)
+      assertEquals(tree.stack, ctx.stack, s"stack mismatch for: $expr")
+    }
+  }
+
+  //
+  // syntaxTree: unstable words
+  //
+
+  test("syntaxTree: unstable word produces warning diagnostic") {
+    val unstableWord = new Word {
+      def name: String = "experimental"
+      def matches(stack: List[Any]): Boolean = true
+      def execute(context: Context): Context =
+        context.copy(stack = "exp" :: context.stack)
+      def summary: String = ""
+      def signature: String = "-- exp"
+      def examples: List[String] = Nil
+      override def isStable: Boolean = false
+    }
+    val interp = Interpreter(StandardVocabulary.allWords :+ unstableWord)
+    val tree = interp.syntaxTree(":experimental")
+    assertEquals(tree.nodes.size, 1)
+    val wordNode = tree.nodes.head.asInstanceOf[WordNode]
+    assert(wordNode.word.isDefined)
+    assert(wordNode.diagnostic.isDefined)
+    assertEquals(wordNode.diagnostic.get.severity, Severity.Warning)
+    assert(wordNode.diagnostic.get.message.contains("unstable"))
+    // Word still executed successfully
+    assertEquals(tree.stack, List("exp"))
+    // Warning appears in tree diagnostics
+    assertEquals(tree.diagnostics.size, 1)
+    assertEquals(tree.diagnostics.head.severity, Severity.Warning)
+  }
+
+  //
+  // syntaxTree: span accuracy
+  //
+
+  test("syntaxTree: spans point to correct substrings") {
+    val expr = "abc, :dup , xyz"
+    val tree = interpreter.syntaxTree(expr)
+    tree.nodes.foreach { node =>
+      val span = node.span
+      val substr = expr.substring(span.start, span.end)
+      node match {
+        case LiteralNode(token) => assertEquals(substr, token.value)
+        case WordNode(token, _, _, _) => assertEquals(substr, token.value)
+        case _ =>
+      }
+    }
+  }
+}
