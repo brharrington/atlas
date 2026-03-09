@@ -54,3 +54,9 @@ case class ListNode(
     Span(open.span.start, endPos)
   }
 }
+
+/** A comment delimited by `/* ... */`, possibly nested. */
+case class CommentNode(
+  text: String,
+  span: Span
+) extends SyntaxNode
