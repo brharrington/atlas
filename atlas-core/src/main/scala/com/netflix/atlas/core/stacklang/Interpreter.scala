@@ -171,7 +171,7 @@ case class Interpreter(vocabulary: List[Word]) {
     val tokens = Interpreter.tokenize(str)
     val diagnostics = List.newBuilder[Diagnostic]
     var stack: List[Any] = Nil
-    val context = Context(this, Nil, vars, vars, features = Features.UNSTABLE)
+    var currentVars: Map[String, Any] = vars
 
     def buildNodes(ts: List[Token]): (List[SyntaxNode], List[Token]) = {
       val nodes = List.newBuilder[SyntaxNode]
@@ -218,12 +218,13 @@ case class Interpreter(vocabulary: List[Word]) {
                     diagnostics += d
                     nodes += WordNode(token, None, stackBefore, Some(d))
                   case Some(ws) =>
-                    val ctx = context.copy(stack = currentStack)
+                    val ctx = Context(this, currentStack, currentVars, currentVars, features = Features.UNSTABLE)
                     try {
                       val result = executeFirstMatchingWord(name, ws, ctx)
                       val matched = ws.find(_.matches(currentStack))
                       currentStack = result.stack
                       stack = currentStack
+                      currentVars = result.variables
                       val diag = matched.filter(!_.isStable).map { w =>
                         val d = Diagnostic(token.span, s":${w.name} is unstable", Severity.Warning)
                         diagnostics += d

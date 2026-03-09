@@ -374,4 +374,10 @@ class SyntaxTreeSuite extends FunSuite {
       assertEquals(tree.stack, ctx.stack, s"stack mismatch for: $expr")
     }
   }
+
+  test("syntaxTree: set and fcall propagates variables") {
+    val tree = interpreter.syntaxTree("duplicate,(,:dup,),:set,4,duplicate,:fcall")
+    assertEquals(tree.diagnostics, Nil)
+    assertEquals(tree.stack, List("4", "4"))
+  }
 }
