@@ -15,15 +15,16 @@
  */
 package com.netflix.atlas.lsp
 
+import com.netflix.atlas.core.model.CustomVocabulary
+
 import java.io.OutputStream
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
 import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets
-
-import com.netflix.atlas.core.stacklang.StandardVocabulary
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import com.typesafe.config.ConfigFactory
 import org.eclipse.lsp4j.launch.LSPLauncher
 import org.java_websocket.WebSocket
 import org.java_websocket.handshake.ClientHandshake
@@ -119,7 +120,7 @@ object AtlasLspRunner {
       // LSP4j writes Content-Length framed messages; we strip the framing
       val wsOut = new WebSocketOutputStream(conn)
 
-      val server = new AtlasLspServer(StandardVocabulary)
+      val server = new AtlasLspServer(new CustomVocabulary(ConfigFactory.load()))
       val launcher = LSPLauncher.createServerLauncher(server, pipedIn, wsOut)
       server.connect(launcher.getRemoteProxy)
 
