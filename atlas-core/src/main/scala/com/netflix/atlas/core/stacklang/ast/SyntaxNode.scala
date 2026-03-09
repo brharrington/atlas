@@ -23,13 +23,13 @@ sealed trait SyntaxNode {
 }
 
 /** A literal value that gets pushed onto the stack. */
-case class LiteralNode(token: Token) extends SyntaxNode {
+case class LiteralNode(token: ValueToken) extends SyntaxNode {
   def span: Span = token.span
 }
 
 /** A word/operator reference (e.g. :dup, :eq). */
 case class WordNode(
-  token: Token,
+  token: ValueToken,
   word: Option[Word],
   stack: List[Any],
   diagnostic: Option[Diagnostic]
@@ -40,9 +40,9 @@ case class WordNode(
 
 /** A parenthesized list group. */
 case class ListNode(
-  open: Token,
+  open: ValueToken,
   children: List[SyntaxNode],
-  close: Option[Token],
+  close: Option[ValueToken],
   diagnostic: Option[Diagnostic]
 ) extends SyntaxNode {
 
@@ -56,7 +56,6 @@ case class ListNode(
 }
 
 /** A comment delimited by `/* ... */`, possibly nested. */
-case class CommentNode(
-  text: String,
-  span: Span
-) extends SyntaxNode
+case class CommentNode(token: CommentToken) extends SyntaxNode {
+  def span: Span = token.span
+}

@@ -72,6 +72,11 @@
     #diagnostics-panel .info { color: #3794ff; }
     #diagnostics-panel .none { color: #666; font-style: italic; }
     #completions-panel .item { padding: 1px 0; color: #9cdcfe; }
+    #cursor-panel .token-info { padding: 2px 0; }
+    #cursor-panel .token-value { color: #ce9178; }
+    #cursor-panel .token-type { color: #4ec5d4; }
+    #cursor-panel .token-range { color: #888; }
+    #cursor-panel .none { color: #666; font-style: italic; }
     #log-panel .entry { padding: 1px 0; color: #888; font-size: 11px; }
     #log-panel .entry.send { color: #6a9955; }
     #log-panel .entry.recv { color: #569cd6; }
@@ -91,6 +96,12 @@
     <div class="panel" id="completions-panel">
       <div class="panel-header">Completions</div>
       <div class="panel-body" id="completions-body"></div>
+    </div>
+    <div class="panel" id="cursor-panel">
+      <div class="panel-header">Cursor Token</div>
+      <div class="panel-body" id="cursor-body">
+        <div class="none">Move cursor to inspect tokens</div>
+      </div>
     </div>
     <div class="panel" id="log-panel">
       <div class="panel-header">LSP Log</div>
@@ -284,14 +295,59 @@
       }
 
       // Token type names matching AtlasTokenTypes indices
-      const tokenTypeNames = ['function', 'string', 'number', 'operator', 'variable'];
-      const tokenDecorations = [];
+      const tokenTypeNames = ['Word', 'String', 'Number', 'Parenthesis', 'UnknownWord', 'Comment'];
+      let decodedTokens = []; // [{start, length, end, typeName, typeIndex}]
 
       function applySemanticTokens(data) {
-        // LSP semantic tokens are relative; decode to absolute positions
-        // We don't apply Monaco decorations here since Monaco's semantic tokens
-        // provider would be the proper integration. For now the Monarch tokenizer
-        // handles highlighting. The semantic token data is logged for debugging.
+        // Decode LSP relative positions to absolute token ranges
+        decodedTokens = [];
+        let pos = 0;
+        for (let i = 0; i < data.length; i += 5) {
+          pos += data[i + 1]; // deltaStart (deltaLine is always 0 for single-line)
+          const length = data[i + 2];
+          const typeIndex = data[i + 3];
+          decodedTokens.push({
+            start: pos,
+            length: length,
+            end: pos + length,
+            typeIndex: typeIndex,
+            typeName: tokenTypeNames[typeIndex] || 'Unknown'
+          });
+        }
+        updateCursorToken();
+      }
+
+      function updateCursorToken() {
+        const el = document.getElementById('cursor-body');
+        const pos = editor.getPosition();
+        const model = editor.getModel();
+        // Compute absolute offset: sum of all preceding line lengths + column on current line
+        let offset = 0;
+        for (let line = 1; line < pos.lineNumber; line++) {
+          offset += model.getLineLength(line) + model.getEOL().length;
+        }
+        offset += pos.column - 1;
+        const text = model.getValue();
+
+        // Find token at cursor position
+        const token = decodedTokens.find(t => offset >= t.start && offset < t.end);
+        if (!token) {
+          // Check if cursor is on a comma or whitespace
+          const ch = offset < text.length ? text[offset] : '';
+          el.innerHTML = `<div class="token-info">` +
+            `<div class="token-range">Ln ${pos.lineNumber} Col ${pos.column} &nbsp; Offset: ${offset}</div>` +
+            `<div class="none">No token at cursor` +
+            (ch ? ` (char: '${escapeHtml(ch)}')` : '') +
+            `</div></div>`;
+          return;
+        }
+
+        const value = text.substring(token.start, token.end);
+        el.innerHTML = `<div class="token-info">` +
+          `<div class="token-range">Ln ${pos.lineNumber} Col ${pos.column} &nbsp; Offset: ${offset} &nbsp; Range: [${token.start}, ${token.end})</div>` +
+          `<div>Value: <span class="token-value">${escapeHtml(value)}</span></div>` +
+          `<div>Type: <span class="token-type">${token.typeName}</span> (${token.typeIndex})</div>` +
+          `</div>`;
       }
 
       // --- Diagnostics ---
@@ -364,6 +420,11 @@
       function escapeHtml(s) {
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       }
+
+      editor.onDidChangeCursorPosition(() => {
+        updateCursorToken();
+        requestCompletions();
+      });
 
       window.addEventListener('resize', () => editor.layout());
 

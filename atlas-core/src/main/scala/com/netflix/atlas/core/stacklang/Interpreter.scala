@@ -179,65 +179,69 @@ case class Interpreter(vocabulary: List[Word]) {
       var currentStack = stack
 
       while (remaining.nonEmpty) {
-        val token = remaining.head
-        remaining = remaining.tail
-        token.value match {
-          case "(" =>
-            val (children, rest) = buildListChildren(remaining)
-            val closeToken = rest.headOption.filter(_.value == ")")
-            val diag = if (closeToken.isEmpty) {
-              val d = Diagnostic(token.span, "unmatched opening parenthesis", Severity.Error)
-              diagnostics += d
-              Some(d)
-            } else None
-            // Build the list value from children (strings only, not executed)
-            val listValues = children.map {
-              case LiteralNode(t) => t.value
-              case WordNode(t, _, _, _) => s":${t.value.stripPrefix(":")}"
-              case n => n.toString
-            }
-            currentStack = listValues :: currentStack
-            stack = currentStack
-            val node = ListNode(token, children, closeToken, diag)
-            nodes += node
-            remaining = if (closeToken.isDefined) rest.tail else rest
-          case ")" =>
-            val d = Diagnostic(token.span, "unmatched closing parenthesis", Severity.Error)
-            diagnostics += d
-            nodes += LiteralNode(token)
-            // Don't update the stack for unmatched close paren
-          case v if v.startsWith(":") =>
-            val name = v.substring(1)
-            val stackBefore = currentStack
-            words.get(name) match {
-              case None =>
-                val d = Diagnostic(token.span, s"unknown word ':$name'", Severity.Error)
+        remaining.head match {
+          case ct: CommentToken =>
+            remaining = remaining.tail
+            nodes += CommentNode(ct)
+          case token: ValueToken =>
+            remaining = remaining.tail
+            token.value match {
+              case "(" =>
+                val (children, rest) = buildListChildren(remaining)
+                val closeToken = rest.headOption.collect { case vt: ValueToken if vt.value == ")" => vt }
+                val diag = if (closeToken.isEmpty) {
+                  val d = Diagnostic(token.span, "unmatched opening parenthesis", Severity.Error)
+                  diagnostics += d
+                  Some(d)
+                } else None
+                // Build the list value from children (strings only, not executed)
+                val listValues = children.collect {
+                  case LiteralNode(t) => t.value
+                  case WordNode(t, _, _, _) => s":${t.value.stripPrefix(":")}"
+                }
+                currentStack = listValues :: currentStack
+                stack = currentStack
+                val node = ListNode(token, children, closeToken, diag)
+                nodes += node
+                remaining = if (closeToken.isDefined) rest.tail else rest
+              case ")" =>
+                val d = Diagnostic(token.span, "unmatched closing parenthesis", Severity.Error)
                 diagnostics += d
-                nodes += WordNode(token, None, stackBefore, Some(d))
-              case Some(ws) =>
-                val ctx = context.copy(stack = currentStack)
-                try {
-                  val result = executeFirstMatchingWord(name, ws, ctx)
-                  val matched = ws.find(_.matches(currentStack))
-                  currentStack = result.stack
-                  stack = currentStack
-                  val diag = matched.filter(!_.isStable).map { w =>
-                    val d = Diagnostic(token.span, s":${w.name} is unstable", Severity.Warning)
-                    diagnostics += d
-                    d
-                  }
-                  nodes += WordNode(token, matched, stackBefore, diag)
-                } catch {
-                  case e: Exception =>
-                    val d = Diagnostic(token.span, e.getMessage, Severity.Error)
+                nodes += LiteralNode(token)
+                // Don't update the stack for unmatched close paren
+              case v if v.startsWith(":") =>
+                val name = v.substring(1)
+                val stackBefore = currentStack
+                words.get(name) match {
+                  case None =>
+                    val d = Diagnostic(token.span, s"unknown word ':$name'", Severity.Error)
                     diagnostics += d
                     nodes += WordNode(token, None, stackBefore, Some(d))
+                  case Some(ws) =>
+                    val ctx = context.copy(stack = currentStack)
+                    try {
+                      val result = executeFirstMatchingWord(name, ws, ctx)
+                      val matched = ws.find(_.matches(currentStack))
+                      currentStack = result.stack
+                      stack = currentStack
+                      val diag = matched.filter(!_.isStable).map { w =>
+                        val d = Diagnostic(token.span, s":${w.name} is unstable", Severity.Warning)
+                        diagnostics += d
+                        d
+                      }
+                      nodes += WordNode(token, matched, stackBefore, diag)
+                    } catch {
+                      case e: Exception =>
+                        val d = Diagnostic(token.span, e.getMessage, Severity.Error)
+                        diagnostics += d
+                        nodes += WordNode(token, None, stackBefore, Some(d))
+                    }
                 }
+              case v =>
+                currentStack = Interpreter.unescape(v) :: currentStack
+                stack = currentStack
+                nodes += LiteralNode(token)
             }
-          case v =>
-            currentStack = Interpreter.unescape(v) :: currentStack
-            stack = currentStack
-            nodes += LiteralNode(token)
         }
       }
       (nodes.result(), remaining)
@@ -249,28 +253,33 @@ case class Interpreter(vocabulary: List[Word]) {
       var depth = 0
 
       while (remaining.nonEmpty) {
-        val token = remaining.head
-        token.value match {
-          case ")" if depth == 0 =>
-            return (nodes.result(), remaining)
-          case "(" =>
+        remaining.head match {
+          case ct: CommentToken =>
             remaining = remaining.tail
-            depth += 1
-            // Nested list: recurse
-            val (children, rest) = buildListChildren(remaining)
-            val closeToken = rest.headOption.filter(_.value == ")")
-            val node = ListNode(token, children, closeToken, None)
-            nodes += node
-            remaining = if (closeToken.isDefined) rest.tail else rest
-            if (closeToken.isDefined) depth -= 1
-          case ")" if depth > 0 =>
-            remaining = remaining.tail
-            depth -= 1
-            // Return this level
-            return (nodes.result(), remaining)
-          case _ =>
-            remaining = remaining.tail
-            nodes += LiteralNode(token)
+            nodes += CommentNode(ct)
+          case token: ValueToken =>
+            token.value match {
+              case ")" if depth == 0 =>
+                return (nodes.result(), remaining)
+              case "(" =>
+                remaining = remaining.tail
+                depth += 1
+                // Nested list: recurse
+                val (children, rest) = buildListChildren(remaining)
+                val closeToken = rest.headOption.collect { case vt: ValueToken if vt.value == ")" => vt }
+                val node = ListNode(token, children, closeToken, None)
+                nodes += node
+                remaining = if (closeToken.isDefined) rest.tail else rest
+                if (closeToken.isDefined) depth -= 1
+              case ")" if depth > 0 =>
+                remaining = remaining.tail
+                depth -= 1
+                // Return this level
+                return (nodes.result(), remaining)
+              case _ =>
+                remaining = remaining.tail
+                nodes += LiteralNode(token)
+            }
         }
       }
       (nodes.result(), remaining)
@@ -501,28 +510,119 @@ object Interpreter {
 
   /**
     * Split the input string on commas and trim whitespace, returning tokens with their
-    * character positions in the original string. This mirrors the behavior of `splitAndTrim`
-    * but preserves position information for use in syntax tree construction.
+    * character positions in the original string. Comments are returned as `CommentToken`
+    * and regular values as `ValueToken`. When a comment is embedded inside a value
+    * (e.g., `:d&#47;*c*&#47;up`), the value fragments are tracked in the `spans` list
+    * so that each fragment can be highlighted independently.
     */
   def tokenize(str: String): List[Token] = {
-    val builder = List.newBuilder[Token]
-    var segStart = 0
+    val n = str.length
+    val result = List.newBuilder[Token]
+
+    // First pass: find comma positions that are outside comments
+    val commaPositions = List.newBuilder[Int]
+    var depth = 0
     var i = 0
-    while (i <= str.length) {
-      if (i == str.length || str.charAt(i) == ',') {
-        // Find trimmed content within this segment
-        var s = segStart
+    while (i < n) {
+      val c = str.charAt(i)
+      if (c == '/' && i + 1 < n && str.charAt(i + 1) == '*') {
+        depth += 1
+        i += 2
+      } else if (c == '*' && i + 1 < n && str.charAt(i + 1) == '/') {
+        depth -= 1
+        if (depth < 0)
+          throw new IllegalStateException("unclosed comment")
+        i += 2
+      } else {
+        if (c == ',' && depth == 0)
+          commaPositions += i
+        i += 1
+      }
+    }
+    if (depth > 0)
+      throw new IllegalStateException("unclosed comment")
+
+    // Second pass: process each comma-delimited segment
+    val commas = commaPositions.result()
+    val boundaries = -1 :: commas ::: List(n)
+
+    var bi = 0
+    while (bi < boundaries.size - 1) {
+      val segStart = boundaries(bi) + 1
+      val segEnd = boundaries(bi + 1)
+      emitSegmentTokens(str, segStart, segEnd, result)
+      bi += 1
+    }
+
+    result.result()
+  }
+
+  /**
+    * Process a single comma-delimited segment, emitting `CommentToken`s and at most one
+    * `ValueToken`. The value token's text is the concatenation of all non-comment,
+    * non-whitespace-trimmed fragments, and its `spans` list tracks each fragment's position.
+    */
+  private def emitSegmentTokens(
+    str: String,
+    segStart: Int,
+    segEnd: Int,
+    result: collection.mutable.Builder[Token, List[Token]]
+  ): Unit = {
+    val valueSpans = List.newBuilder[Span]
+    val valueText = new java.lang.StringBuilder()
+    val comments = List.newBuilder[CommentToken]
+    var i = segStart
+
+    while (i < segEnd) {
+      val c = str.charAt(i)
+      if (c == '/' && i + 1 < segEnd && str.charAt(i + 1) == '*') {
+        // Parse comment
+        val commentStart = i
+        var depth = 1
+        i += 2
+        while (i < str.length && depth > 0) {
+          if (str.charAt(i) == '/' && i + 1 < str.length && str.charAt(i + 1) == '*') {
+            depth += 1
+            i += 2
+          } else if (str.charAt(i) == '*' && i + 1 < str.length && str.charAt(i + 1) == '/') {
+            depth -= 1
+            i += 2
+          } else {
+            i += 1
+          }
+        }
+        comments += CommentToken(str.substring(commentStart, i), Span(commentStart, i))
+      } else {
+        // Non-comment text: collect until next comment start or segment end
+        val fragStart = i
+        while (i < segEnd && !(str.charAt(i) == '/' && i + 1 < segEnd && str.charAt(i + 1) == '*')) {
+          i += 1
+        }
+        // Trim whitespace from this fragment
+        var s = fragStart
         var e = i
         while (s < e && Character.isWhitespace(str.charAt(s))) s += 1
         while (e > s && Character.isWhitespace(str.charAt(e - 1))) e -= 1
         if (s < e) {
-          builder += Token(str.substring(s, e), Span(s, e))
+          valueSpans += Span(s, e)
+          valueText.append(str, s, e)
         }
-        segStart = i + 1
       }
-      i += 1
     }
-    builder.result()
+
+    // Emit tokens in source order
+    val spans = valueSpans.result()
+    val commentList = comments.result()
+
+    // Collect all tokens with their start positions for ordering
+    val items = List.newBuilder[(Int, Token)]
+    if (spans.nonEmpty) {
+      items += (spans.head.start -> ValueToken(valueText.toString, spans))
+    }
+    commentList.foreach { c =>
+      items += (c.span.start -> c)
+    }
+    items.result().sortBy(_._1).foreach { case (_, token) => result += token }
   }
 
   /**

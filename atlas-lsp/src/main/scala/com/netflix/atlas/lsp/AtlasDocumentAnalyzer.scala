@@ -82,9 +82,9 @@ class AtlasDocumentAnalyzer(
     val tree = interpreter.syntaxTree(beforeCursor)
 
     // Determine if the user is in the middle of typing a word
-    val lastToken = Interpreter.tokenize(beforeCursor).lastOption
-    val (stack, currentPrefix) = lastToken match {
-      case Some(Token(v, _)) if v.startsWith(":") =>
+    val lastValueToken = Interpreter.tokenize(beforeCursor).collect { case vt: ValueToken => vt }.lastOption
+    val (stack, currentPrefix) = lastValueToken match {
+      case Some(ValueToken(v, _)) if v.startsWith(":") =>
         // Cursor is on a partial word — use the stack state before the last node
         val stackBefore = tree.nodes.lastOption match {
           case Some(w: WordNode) => w.stack
@@ -118,28 +118,31 @@ class AtlasDocumentAnalyzer(
     val builder = List.newBuilder[Integer]
     var prevStart = 0
 
+    def encodeValueToken(token: ValueToken, tokenType: Int): Unit = {
+      token.spans.foreach { s =>
+        appendToken(builder, s, tokenType, prevStart)
+        prevStart = s.start
+      }
+    }
+
     def encodeNode(node: SyntaxNode): Unit = {
       node match {
         case LiteralNode(token) =>
-          val tokenType = classifyLiteral(token.value)
-          appendToken(builder, token.span, tokenType, prevStart)
-          prevStart = token.span.start
-        case WordNode(token, word, _, diagnostic) =>
+          encodeValueToken(token, classifyLiteral(token.value))
+        case WordNode(token, _, _, diagnostic) =>
           val tokenType = if (diagnostic.exists(_.severity == Severity.Error)) {
             AtlasTokenTypes.UnknownWord
           } else {
             AtlasTokenTypes.Word
           }
-          appendToken(builder, token.span, tokenType, prevStart)
-          prevStart = token.span.start
+          encodeValueToken(token, tokenType)
         case ListNode(open, children, close, _) =>
-          appendToken(builder, open.span, AtlasTokenTypes.Parenthesis, prevStart)
-          prevStart = open.span.start
+          encodeValueToken(open, AtlasTokenTypes.Parenthesis)
           children.foreach(encodeNode)
-          close.foreach { c =>
-            appendToken(builder, c.span, AtlasTokenTypes.Parenthesis, prevStart)
-            prevStart = c.span.start
-          }
+          close.foreach(c => encodeValueToken(c, AtlasTokenTypes.Parenthesis))
+        case CommentNode(token) =>
+          appendToken(builder, token.span, AtlasTokenTypes.Comment, prevStart)
+          prevStart = token.span.start
       }
     }
 

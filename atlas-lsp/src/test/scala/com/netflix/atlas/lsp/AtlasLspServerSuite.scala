@@ -197,4 +197,35 @@ class AtlasLspServerSuite extends FunSuite {
     assertEquals(tokens(1)._3, AtlasTokenTypes.String)
     assertEquals(tokens(2)._3, AtlasTokenTypes.Word)
   }
+
+  //
+  // semantic tokens: comments
+  //
+
+  test("semantic tokens: standalone comment") {
+    val server = newServer
+    val uri = "expr:st7"
+    openDocument(server, uri, "a,/* comment */,b")
+    val tokens = decodeTokens(requestSemanticTokens(server, uri))
+    val commentTokens = tokens.filter(_._3 == AtlasTokenTypes.Comment)
+    assertEquals(commentTokens.size, 1)
+    // "/* comment */" starts at 2, length 13
+    assertEquals(commentTokens.head, (2, 13, AtlasTokenTypes.Comment))
+  }
+
+  test("semantic tokens: comment embedded in word") {
+    val server = newServer
+    val uri = "expr:st8"
+    // a,:d/*c*/up -> word fragments :d at 2-4 and up at 9-11, comment /*c*/ at 4-9
+    openDocument(server, uri, "a,:d/*c*/up")
+    val tokens = decodeTokens(requestSemanticTokens(server, uri))
+    // Expect: String "a" at 0, Word ":d" at 2, Comment "/*c*/" at 4, Word "up" at 9
+    val wordTokens = tokens.filter(_._3 == AtlasTokenTypes.Word)
+    val commentTokens = tokens.filter(_._3 == AtlasTokenTypes.Comment)
+    assertEquals(wordTokens.size, 2) // two fragments of :dup
+    assertEquals(commentTokens.size, 1)
+    assertEquals(wordTokens(0), (2, 2, AtlasTokenTypes.Word))   // :d
+    assertEquals(wordTokens(1), (9, 2, AtlasTokenTypes.Word))   // up
+    assertEquals(commentTokens.head, (4, 5, AtlasTokenTypes.Comment)) // /*c*/
+  }
 }

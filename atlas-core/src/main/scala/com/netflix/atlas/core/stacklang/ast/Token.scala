@@ -15,5 +15,21 @@
  */
 package com.netflix.atlas.core.stacklang.ast
 
-/** A token with its value and position in the source string. */
-case class Token(value: String, span: Span)
+/** A token produced by the tokenizer with position information. */
+sealed trait Token {
+
+  /** The encompassing span of this token in the source string. */
+  def span: Span
+}
+
+/**
+  * A value token with its text and source position fragments. When a comment is embedded
+  * in a token (e.g., `:d&#47;*c*&#47;up` producing value `:dup`), the spans list contains
+  * the disjoint source fragments that make up the value.
+  */
+case class ValueToken(value: String, spans: List[Span]) extends Token {
+  def span: Span = Span(spans.head.start, spans.last.end)
+}
+
+/** A comment token delimited by `&#47;* ... *&#47;`. */
+case class CommentToken(text: String, span: Span) extends Token

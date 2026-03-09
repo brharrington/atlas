@@ -22,18 +22,26 @@ class SyntaxTreeSuite extends FunSuite {
 
   private val interpreter = Interpreter(StandardVocabulary.allWords)
 
+  private def valueTokens(str: String): List[ValueToken] = {
+    Interpreter.tokenize(str).collect { case vt: ValueToken => vt }
+  }
+
+  private def commentTokens(str: String): List[CommentToken] = {
+    Interpreter.tokenize(str).collect { case ct: CommentToken => ct }
+  }
+
   //
-  // tokenize
+  // tokenize: basic value tokens
   //
 
   test("tokenize: simple tokens") {
-    val tokens = Interpreter.tokenize("a,b,c")
+    val tokens = valueTokens("a,b,c")
     assertEquals(tokens.map(_.value), List("a", "b", "c"))
     assertEquals(tokens.map(_.span), List(Span(0, 1), Span(2, 3), Span(4, 5)))
   }
 
   test("tokenize: whitespace trimming preserves position") {
-    val tokens = Interpreter.tokenize("  a , b , c  ")
+    val tokens = valueTokens("  a , b , c  ")
     assertEquals(tokens.map(_.value), List("a", "b", "c"))
     assertEquals(tokens(0).span, Span(2, 3))
     assertEquals(tokens(1).span, Span(6, 7))
@@ -41,12 +49,12 @@ class SyntaxTreeSuite extends FunSuite {
   }
 
   test("tokenize: empty segments skipped") {
-    val tokens = Interpreter.tokenize("a,,b,  ,c")
+    val tokens = valueTokens("a,,b,  ,c")
     assertEquals(tokens.map(_.value), List("a", "b", "c"))
   }
 
   test("tokenize: leading and trailing commas") {
-    val tokens = Interpreter.tokenize(",a,b,")
+    val tokens = valueTokens(",a,b,")
     assertEquals(tokens.map(_.value), List("a", "b"))
   }
 
@@ -55,7 +63,7 @@ class SyntaxTreeSuite extends FunSuite {
   }
 
   test("tokenize: word tokens") {
-    val tokens = Interpreter.tokenize("a,:dup,:swap")
+    val tokens = valueTokens("a,:dup,:swap")
     assertEquals(tokens.map(_.value), List("a", ":dup", ":swap"))
     assertEquals(tokens(1).span, Span(2, 6))
     assertEquals(tokens(2).span, Span(7, 12))
@@ -70,10 +78,95 @@ class SyntaxTreeSuite extends FunSuite {
       ",,a,,b,,"
     )
     exprs.foreach { expr =>
-      val tokenValues = Interpreter.tokenize(expr).map(_.value)
+      val tokenValues = valueTokens(expr).map(_.value)
       val splitValues = Interpreter.splitAndTrim(expr)
       assertEquals(tokenValues, splitValues, s"mismatch for: $expr")
     }
+  }
+
+  //
+  // tokenize: comments
+  //
+
+  test("tokenize: standalone comment") {
+    val tokens = Interpreter.tokenize("a,/* comment */,b")
+    val values = tokens.collect { case vt: ValueToken => vt.value }
+    val comments = tokens.collect { case ct: CommentToken => ct.text }
+    assertEquals(values, List("a", "b"))
+    assertEquals(comments, List("/* comment */"))
+  }
+
+  test("tokenize: comment in its own segment") {
+    val tokens = Interpreter.tokenize("a,/* comment */b,:eq")
+    val values = tokens.collect { case vt: ValueToken => vt.value }
+    val comments = tokens.collect { case ct: CommentToken => ct.text }
+    assertEquals(values, List("a", "b", ":eq"))
+    assertEquals(comments, List("/* comment */"))
+  }
+
+  test("tokenize: comment embedded in value") {
+    val tokens = Interpreter.tokenize("a,:d/*comment*/up")
+    val values = tokens.collect { case vt: ValueToken => vt }
+    assertEquals(values.size, 2)
+    assertEquals(values(0).value, "a")
+    assertEquals(values(1).value, ":dup")
+    assertEquals(values(1).spans.size, 2) // :d and up are separate fragments
+  }
+
+  test("tokenize: comment spanning commas") {
+    // a,b,:d/*,d,e,c,*/up is equivalent to a,b,:dup
+    val tokens = Interpreter.tokenize("a,b,:d/*,d,e,c,*/up")
+    val values = tokens.collect { case vt: ValueToken => vt.value }
+    val comments = tokens.collect { case ct: CommentToken => ct.text }
+    assertEquals(values, List("a", "b", ":dup"))
+    assertEquals(comments, List("/*,d,e,c,*/"))
+  }
+
+  test("tokenize: comment at start of expression") {
+    val tokens = Interpreter.tokenize("/* start */a,b")
+    val values = tokens.collect { case vt: ValueToken => vt.value }
+    assertEquals(values, List("a", "b"))
+    assertEquals(commentTokens("/* start */a,b").size, 1)
+  }
+
+  test("tokenize: comment at end of expression") {
+    val tokens = Interpreter.tokenize("a,b/* end */")
+    val values = tokens.collect { case vt: ValueToken => vt.value }
+    assertEquals(values, List("a", "b"))
+  }
+
+  test("tokenize: multiple comments in one segment") {
+    val tokens = Interpreter.tokenize("/*c1*/:d/*c2*/up")
+    val values = tokens.collect { case vt: ValueToken => vt }
+    val comments = tokens.collect { case ct: CommentToken => ct }
+    assertEquals(values.size, 1)
+    assertEquals(values.head.value, ":dup")
+    assertEquals(values.head.spans.size, 2)
+    assertEquals(comments.size, 2)
+  }
+
+  test("tokenize: nested comments") {
+    val tokens = Interpreter.tokenize("a,/* outer /* inner */ end */,b")
+    val values = tokens.collect { case vt: ValueToken => vt.value }
+    assertEquals(values, List("a", "b"))
+  }
+
+  test("tokenize: unclosed comment throws") {
+    intercept[IllegalStateException] {
+      Interpreter.tokenize("a,/* unclosed")
+    }
+  }
+
+  test("tokenize: unmatched close throws") {
+    intercept[IllegalStateException] {
+      Interpreter.tokenize("a,*/b")
+    }
+  }
+
+  test("tokenize: source order preserved") {
+    val tokens = Interpreter.tokenize("/*c1*/a,/*c2*/b")
+    val starts = tokens.map(_.span.start)
+    assertEquals(starts, starts.sorted)
   }
 
   //
@@ -236,6 +329,49 @@ class SyntaxTreeSuite extends FunSuite {
         case WordNode(token, _, _, _) => assertEquals(substr, token.value)
         case _ =>
       }
+    }
+  }
+
+  //
+  // syntaxTree: comments
+  //
+
+  test("syntaxTree: comment produces CommentNode") {
+    val tree = interpreter.syntaxTree("a,/* comment */,b")
+    val comments = tree.nodes.collect { case c: CommentNode => c }
+    assertEquals(comments.size, 1)
+    assertEquals(comments.head.token.text, "/* comment */")
+  }
+
+  test("syntaxTree: comment embedded in word") {
+    val tree = interpreter.syntaxTree("a,:d/*comment*/up")
+    val words = tree.nodes.collect { case w: WordNode => w }
+    assertEquals(words.size, 1)
+    assertEquals(words.head.token.value, ":dup")
+    assert(words.head.word.isDefined)
+    assertEquals(words.head.word.get.name, "dup")
+    assertEquals(tree.stack, List("a", "a")) // a,:dup -> a,a
+  }
+
+  test("syntaxTree: comment spanning commas") {
+    val tree = interpreter.syntaxTree("a,b,:d/*,d,e,c,*/up")
+    val words = tree.nodes.collect { case w: WordNode => w }
+    assertEquals(words.size, 1)
+    assertEquals(words.head.token.value, ":dup")
+    assert(words.head.word.isDefined)
+    assertEquals(tree.stack, List("b", "b", "a")) // a,b,:dup -> b,b,a
+  }
+
+  test("syntaxTree: expression with comments matches execute result") {
+    val exprs = List(
+      "a,/* comment */b,:swap",
+      "a,b,:d/* c */up",
+      "/* start */a,b,:swap/* end */"
+    )
+    exprs.foreach { expr =>
+      val tree = interpreter.syntaxTree(expr)
+      val ctx = interpreter.execute(expr)
+      assertEquals(tree.stack, ctx.stack, s"stack mismatch for: $expr")
     }
   }
 }
