@@ -77,6 +77,13 @@
     #cursor-panel .token-type { color: #4ec5d4; }
     #cursor-panel .token-range { color: #888; }
     #cursor-panel .none { color: #666; font-style: italic; }
+    /* LSP semantic token colors applied via decorations */
+    .atlas-token-word { color: #DCDCAA !important; }
+    .atlas-token-string { color: #CE9178 !important; }
+    .atlas-token-number { color: #B5CEA8 !important; }
+    .atlas-token-paren { color: #D4D4D4 !important; }
+    .atlas-token-unknown { color: #F44747 !important; }
+    .atlas-token-comment { color: #6A9955 !important; font-style: italic; }
     #log-panel .entry { padding: 1px 0; color: #888; font-size: 11px; }
     #log-panel .entry.send { color: #6a9955; }
     #log-panel .entry.recv { color: #569cd6; }
@@ -186,6 +193,10 @@
               text: editor.getValue()
             }
           });
+
+          // Request initial semantic tokens and completions
+          requestSemanticTokens();
+          requestCompletions();
         };
 
         ws.onmessage = (event) => {
@@ -220,29 +231,10 @@
       // --- Register Atlas language ---
       monaco.languages.register({ id: 'atlas' });
 
-      monaco.languages.setMonarchTokensProvider('atlas', {
-        tokenizer: {
-          root: [
-            [/:[a-zA-Z_][\w\-]*/, 'keyword'],
-            [/-?\d+(\.\d+)?/, 'number'],
-            [/[()]/, 'delimiter.parenthesis'],
-            [/,/, 'delimiter'],
-            [/[^\s,:()\-][^\s,()]*/, 'string'],
-            [/-(?!\d)/, 'string'],
-          ]
-        }
-      });
-
       monaco.editor.defineTheme('atlas-dark', {
         base: 'vs-dark',
         inherit: true,
-        rules: [
-          { token: 'keyword', foreground: 'DCDCAA' },
-          { token: 'number', foreground: 'B5CEA8' },
-          { token: 'string', foreground: 'CE9178' },
-          { token: 'delimiter.parenthesis', foreground: 'D4D4D4' },
-          { token: 'delimiter', foreground: '808080' },
-        ],
+        rules: [],
         colors: {}
       });
 
@@ -298,8 +290,19 @@
       const tokenTypeNames = ['Word', 'String', 'Number', 'Parenthesis', 'UnknownWord', 'Comment'];
       let decodedTokens = []; // [{start, length, end, typeName, typeIndex}]
 
+      // CSS classes for each token type index (matching AtlasTokenTypes)
+      const tokenCssClasses = [
+        'atlas-token-word',     // 0: Word
+        'atlas-token-string',   // 1: String
+        'atlas-token-number',   // 2: Number
+        'atlas-token-paren',    // 3: Parenthesis
+        'atlas-token-unknown',  // 4: UnknownWord
+        'atlas-token-comment',  // 5: Comment
+      ];
+      let decorationIds = [];
+
       function applySemanticTokens(data) {
-        // Decode LSP relative positions to absolute token ranges
+        // Decode for cursor token panel
         decodedTokens = [];
         let pos = 0;
         for (let i = 0; i < data.length; i += 5) {
@@ -315,6 +318,23 @@
           });
         }
         updateCursorToken();
+
+        // Apply decorations to the editor using LSP semantic tokens
+        const model = editor.getModel();
+        const decorations = decodedTokens.map(t => {
+          const startPos = model.getPositionAt(t.start);
+          const endPos = model.getPositionAt(t.end);
+          return {
+            range: new monaco.Range(
+              startPos.lineNumber, startPos.column,
+              endPos.lineNumber, endPos.column
+            ),
+            options: {
+              inlineClassName: tokenCssClasses[t.typeIndex] || ''
+            }
+          };
+        });
+        decorationIds = editor.deltaDecorations(decorationIds, decorations);
       }
 
       function updateCursorToken() {

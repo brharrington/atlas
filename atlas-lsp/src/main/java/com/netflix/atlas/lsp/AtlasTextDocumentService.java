@@ -76,7 +76,8 @@ public class AtlasTextDocumentService implements TextDocumentService {
             CompletionParams params) {
         var uri = params.getTextDocument().getUri();
         var text = analyzer.getText(uri);
-        var offset = params.getPosition().getCharacter();
+        var pos = params.getPosition();
+        var offset = positionToOffset(text, pos.getLine(), pos.getCharacter());
         var items = analyzer.computeCompletions(text, offset);
         var javaItems = CollectionConverters.asJava(items);
         var result = Either.<java.util.List<CompletionItem>, CompletionList>forLeft(
@@ -91,5 +92,18 @@ public class AtlasTextDocumentService implements TextDocumentService {
         var data = analyzer.computeSemanticTokens(text);
         var javaData = CollectionConverters.asJava(data);
         return CompletableFuture.completedFuture(new SemanticTokens(new java.util.ArrayList<>(javaData)));
+    }
+
+    /** Convert an LSP line/character position to an absolute character offset. */
+    private static int positionToOffset(String text, int line, int character) {
+        int offset = 0;
+        int currentLine = 0;
+        while (currentLine < line && offset < text.length()) {
+            if (text.charAt(offset) == '\n') {
+                currentLine++;
+            }
+            offset++;
+        }
+        return offset + character;
     }
 }

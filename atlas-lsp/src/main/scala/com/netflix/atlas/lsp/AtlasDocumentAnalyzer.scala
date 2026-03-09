@@ -81,16 +81,15 @@ class AtlasDocumentAnalyzer(
     val beforeCursor = text.substring(0, math.min(offset, text.length))
     val tree = interpreter.syntaxTree(beforeCursor)
 
-    // Determine if the user is in the middle of typing a word
-    val lastValueToken = Interpreter.tokenize(beforeCursor).collect { case vt: ValueToken => vt }.lastOption
-    val (stack, currentPrefix) = lastValueToken match {
-      case Some(ValueToken(v, _)) if v.startsWith(":") =>
-        // Cursor is on a partial word — use the stack state before the last node
-        val stackBefore = tree.nodes.lastOption match {
-          case Some(w: WordNode) => w.stack
-          case _                 => tree.stack
-        }
-        (stackBefore, v.substring(1))
+    // Determine if the user is in the middle of typing a word or has completed one
+    val lastWordNode = tree.nodes.reverseIterator.collectFirst { case w: WordNode => w }
+    val (stack, currentPrefix) = lastWordNode match {
+      case Some(w) if w.word.isDefined =>
+        // Completed word that executed successfully — offer next-token completions
+        (tree.stack, "")
+      case Some(w) =>
+        // Partial or unknown word — prefix-filter using stack before this word
+        (w.stack, w.token.value.stripPrefix(":"))
       case _ =>
         (tree.stack, "")
     }
