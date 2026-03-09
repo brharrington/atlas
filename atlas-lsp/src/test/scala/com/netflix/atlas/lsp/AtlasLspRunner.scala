@@ -48,10 +48,13 @@ object AtlasLspRunner {
 
     // HTTP server for serving the test page
     val httpServer = HttpServer.create(new InetSocketAddress(httpPort), 0)
-    httpServer.createContext("/", exchange => {
-      if (exchange.getRequestMethod == "GET") serveHtml(exchange)
-      else methodNotAllowed(exchange)
-    })
+    httpServer.createContext(
+      "/",
+      exchange => {
+        if (exchange.getRequestMethod == "GET") serveHtml(exchange)
+        else methodNotAllowed(exchange)
+      }
+    )
     httpServer.setExecutor(null)
     httpServer.start()
 
@@ -98,8 +101,7 @@ object AtlasLspRunner {
     * LSP4j expects Content-Length framing on its InputStream, so we wrap messages
     * before piping them in, and strip framing from the OutputStream before sending.
     */
-  private class LspWebSocketServer(address: InetSocketAddress)
-      extends WebSocketServer(address) {
+  private class LspWebSocketServer(address: InetSocketAddress) extends WebSocketServer(address) {
 
     setReuseAddr(true)
 
@@ -159,7 +161,8 @@ object AtlasLspRunner {
       println(s"LSP client disconnected: $reason")
       val pipedOut = connections.remove(conn)
       if (pipedOut != null) {
-        try pipedOut.close() catch { case _: Exception => }
+        try pipedOut.close()
+        catch { case _: Exception => }
       }
     }
 
@@ -175,6 +178,7 @@ object AtlasLspRunner {
     * strips the headers, and sends raw JSON over the WebSocket.
     */
   private class WebSocketOutputStream(conn: WebSocket) extends OutputStream {
+
     private val buffer = new java.io.ByteArrayOutputStream(4096)
 
     override def write(b: Int): Unit = {

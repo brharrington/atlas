@@ -15,7 +15,9 @@
  */
 package com.netflix.atlas.core.stacklang.ast
 
-import com.netflix.atlas.core.stacklang.Extractors
+import scala.util.Try
+
+import com.netflix.atlas.core.model.MathExpr
 
 /**
   * Represents a type for a stack language parameter. Provides a name for display
@@ -38,28 +40,58 @@ object DataType {
 
   /** Matches any value on the stack. */
   case object AnyType extends DataType {
+
     def name: String = "Any"
     def extract(value: Any): Option[Any] = Some(value)
   }
 
   /** Matches values that can be coerced to Int (strings, constants, etc.). */
   case object IntType extends DataType {
+
     def name: String = "Int"
-    def extract(value: Any): Option[Any] = Extractors.IntType.unapply(value)
+    def extract(value: Any): Option[Any] = unapply(value)
+
+    def unapply(value: Any): Option[Int] = value match {
+      case v: String            => Try(v.toInt).toOption
+      case v: MathExpr.Constant => Some(v.v.toInt)
+      case v: Int               => Some(v)
+      case _                    => None
+    }
   }
 
   /** Matches values that can be coerced to Double (strings, constants, etc.). */
   case object DoubleType extends DataType {
+
     def name: String = "Double"
-    def extract(value: Any): Option[Any] = Extractors.DoubleType.unapply(value)
+    def extract(value: Any): Option[Any] = unapply(value)
+
+    def unapply(value: Any): Option[Double] = value match {
+      case v: String            => Try(v.toDouble).toOption
+      case v: MathExpr.Constant => Some(v.v)
+      case v: Double            => Some(v)
+      case _                    => None
+    }
   }
 
   /** Matches String values. */
   case object StringType extends DataType {
+
     def name: String = "String"
+
     def extract(value: Any): Option[Any] = value match {
       case s: String => Some(s)
       case _         => None
+    }
+  }
+
+  /** Matches List values. */
+  case object ListType extends DataType {
+
+    def name: String = "List"
+
+    def extract(value: Any): Option[Any] = value match {
+      case v: List[?] => Some(v)
+      case _          => None
     }
   }
 }

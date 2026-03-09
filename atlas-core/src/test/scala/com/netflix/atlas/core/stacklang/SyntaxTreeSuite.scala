@@ -325,9 +325,9 @@ class SyntaxTreeSuite extends FunSuite {
       val span = node.span
       val substr = expr.substring(span.start, span.end)
       node match {
-        case LiteralNode(token) => assertEquals(substr, token.value)
+        case LiteralNode(token)       => assertEquals(substr, token.value)
         case WordNode(token, _, _, _) => assertEquals(substr, token.value)
-        case _ =>
+        case _                        =>
       }
     }
   }

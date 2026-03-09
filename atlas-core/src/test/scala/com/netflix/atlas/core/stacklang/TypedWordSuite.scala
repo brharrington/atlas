@@ -15,6 +15,8 @@
  */
 package com.netflix.atlas.core.stacklang
 
+import scala.collection.immutable.ArraySeq
+
 import com.netflix.atlas.core.stacklang.ast.DataType
 import com.netflix.atlas.core.stacklang.ast.Parameter
 import munit.FunSuite
@@ -69,37 +71,38 @@ class TypedWordSuite extends FunSuite {
   //
 
   private val swapWord = new TypedWord {
+
     def name: String = "swap"
     def summary: String = "Swap the top two items"
     def examples: List[String] = List("a,b,:swap")
-    override def parameters: List[Parameter] = List(
+
+    override def parameters: ArraySeq[Parameter] = ArraySeq(
       Parameter("a", "first item", DataType.AnyType),
       Parameter("b", "second item", DataType.AnyType)
     )
-    override def outputType: Option[DataType] = Some(DataType.AnyType)
-    def execute(context: Context): Context = {
-      context.stack match {
-        case a :: b :: rest => context.copy(stack = b :: a :: rest)
-        case _              => invalidStack
-      }
+    override def outputs: ArraySeq[DataType] = ArraySeq(DataType.AnyType)
+
+    def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      context.copy(stack = params(0) :: params(1) :: context.stack)
     }
   }
 
   private val addIntsWord = new TypedWord {
+
     def name: String = "add-ints"
     def summary: String = "Add two integers"
     def examples: List[String] = List("1,2,:add-ints")
-    override def parameters: List[Parameter] = List(
+
+    override def parameters: ArraySeq[Parameter] = ArraySeq(
       Parameter("a", "first operand", DataType.IntType),
       Parameter("b", "second operand", DataType.IntType)
     )
-    override def outputType: Option[DataType] = Some(DataType.IntType)
-    def execute(context: Context): Context = {
-      context.stack match {
-        case Extractors.IntType(b) :: Extractors.IntType(a) :: rest =>
-          context.copy(stack = (a + b) :: rest)
-        case _ => invalidStack
-      }
+    override def outputs: ArraySeq[DataType] = ArraySeq(DataType.IntType)
+
+    def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val a = params(0).asInstanceOf[Int]
+      val b = params(1).asInstanceOf[Int]
+      context.copy(stack = (a + b) :: context.stack)
     }
   }
 
@@ -138,18 +141,41 @@ class TypedWordSuite extends FunSuite {
       def name: String = "test"
       def summary: String = ""
       def examples: List[String] = Nil
-      override def parameters: List[Parameter] = List(
+      override def parameters: ArraySeq[Parameter] = ArraySeq(
         Parameter("", "anonymous", DataType.IntType)
       )
-      override def outputType: Option[DataType] = None
-      def execute(context: Context): Context = context
+      override def outputs: ArraySeq[DataType] = ArraySeq.empty
+      def execute(context: Context, params: IndexedSeq[Any]): Context = context
     }
-    assertEquals(word.signature, "Int -- *")
+    assertEquals(word.signature, "Int -- ")
+  }
+
+  test("signature: multiple outputs") {
+    val word = new TypedWord {
+      def name: String = "test"
+      def summary: String = ""
+      def examples: List[String] = Nil
+      override def parameters: ArraySeq[Parameter] = ArraySeq(
+        Parameter("a", "input", DataType.AnyType)
+      )
+      override def outputs: ArraySeq[DataType] = ArraySeq(DataType.AnyType, DataType.AnyType)
+      def execute(context: Context, params: IndexedSeq[Any]): Context = {
+        val a = params(0)
+        context.copy(stack = a :: a :: context.stack)
+      }
+    }
+    assertEquals(word.signature, "a:Any -- Any Any")
   }
 
   //
-  // TypedWord: end-to-end execution
+  // TypedWord: auto-extraction
   //
+
+  test("execute: params are extracted and coerced") {
+    val interpreter = Interpreter(List(addIntsWord))
+    val result = interpreter.execute("3,4,:add-ints")
+    assertEquals(result.stack, List(7))
+  }
 
   test("execute: swap word works end-to-end") {
     val interpreter = Interpreter(List(swapWord))
@@ -157,26 +183,25 @@ class TypedWordSuite extends FunSuite {
     assertEquals(result.stack, List("a", "b"))
   }
 
-  test("execute: add-ints word with string coercion") {
-    val interpreter = Interpreter(List(addIntsWord))
-    val result = interpreter.execute("3,4,:add-ints")
-    assertEquals(result.stack, List(7))
-  }
-
-  //
-  // Word default parameters
-  //
-
-  test("Word: parameters defaults to Nil") {
-    val word = new Word {
-      def name: String = "test"
-      def signature: String = "-- test"
+  test("execute: stack items consumed before calling typed execute") {
+    // Verify that the context passed to execute(context, params) has items removed
+    var receivedStack: List[Any] = null
+    val word = new TypedWord {
+      def name: String = "check"
       def summary: String = ""
       def examples: List[String] = Nil
-      def matches(stack: List[Any]): Boolean = true
-      def execute(context: Context): Context = context
+      override def parameters: ArraySeq[Parameter] = ArraySeq(
+        Parameter("a", "", DataType.IntType),
+        Parameter("b", "", DataType.IntType)
+      )
+      override def outputs: ArraySeq[DataType] = ArraySeq.empty
+      def execute(context: Context, params: IndexedSeq[Any]): Context = {
+        receivedStack = context.stack
+        context
+      }
     }
-    assertEquals(word.parameters, Nil)
-    assertEquals(word.outputType, None)
+    val interpreter = Interpreter(List(word))
+    interpreter.execute("x,1,2,:check")
+    assertEquals(receivedStack, List("x"))
   }
 }

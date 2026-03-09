@@ -15,34 +15,42 @@
  */
 package com.netflix.atlas.core.stacklang
 
+import scala.collection.immutable.ArraySeq
+
 import com.netflix.atlas.core.stacklang.ast.DataType
 import com.netflix.atlas.core.stacklang.ast.Parameter
 
 /**
-  * A word with structured parameter declarations. The `matches` and `signature` methods
-  * are automatically derived from the declared parameters and output type. Subclasses
-  * must implement `execute` manually.
+  * A word with structured parameter declarations. The `matches`, `signature`, and
+  * `execute` methods are automatically derived from the declared parameters and outputs.
   *
   * Parameters are declared in user-facing order (deepest stack item first). For example,
   * a word with signature `"a:Int b:Double -- String"` would declare:
   * {{{
-  *   def parameters = List(
+  *   def parameters = ArraySeq(
   *     Parameter("a", "first param", DataType.IntType),
   *     Parameter("b", "second param", DataType.DoubleType)
   *   )
+  *   def outputs = ArraySeq(DataType.StringType)
   * }}}
+  *
+  * Subclasses implement `execute(context, params)` where `params` is an indexed sequence
+  * of already-extracted values in user-facing order and the consumed items have been
+  * removed from the context stack.
   */
 trait TypedWord extends Word {
 
-  override def parameters: List[Parameter]
+  /** Structured parameter declarations in user-facing order (deepest stack item first). */
+  def parameters: IndexedSeq[Parameter]
 
-  override def outputType: Option[DataType]
+  /** Output types produced by this word. Empty means the word does not push any results. */
+  def outputs: IndexedSeq[DataType]
 
   override def signature: String = {
     val inputs = parameters.map { p =>
       if (p.name.isEmpty) p.dataType.name else s"${p.name}:${p.dataType.name}"
     }
-    val output = outputType.map(_.name).getOrElse("*")
+    val output = outputs.map(_.name).mkString(" ")
     s"${inputs.mkString(" ")} -- $output"
   }
 
@@ -51,12 +59,37 @@ trait TypedWord extends Word {
     if (stack.length < params.length) return false
     // Parameters are in user-facing order (deepest first).
     // Stack list has top-of-stack first. Reverse parameters to align.
+    val n = params.length
     var i = 0
-    val reversed = params.reverse
-    while (i < reversed.length) {
-      if (reversed(i).dataType.extract(stack(i)).isEmpty) return false
+    while (i < n) {
+      if (params(n - 1 - i).dataType.extract(stack(i)).isEmpty) return false
       i += 1
     }
     true
   }
+
+  /**
+    * Extracts typed parameters from the stack and delegates to
+    * [[execute(context:Context,params:IndexedSeq[Any])*]]. The consumed items are removed
+    * from the context stack before the call.
+    */
+  final override def execute(context: Context): Context = {
+    val params = parameters
+    val n = params.length
+    val extracted = new Array[Any](n)
+    var i = 0
+    while (i < n) {
+      extracted(i) = params(n - 1 - i).dataType.extract(context.stack(i)).get
+      i += 1
+    }
+    val args = ArraySeq.unsafeWrapArray(extracted).reverse
+    execute(context.copy(stack = context.stack.drop(n)), args)
+  }
+
+  /**
+    * Execute the word with extracted parameters. The context stack has already had
+    * the consumed items removed. `params` are in user-facing order (deepest first),
+    * with values already coerced by their DataType extractors.
+    */
+  def execute(context: Context, params: IndexedSeq[Any]): Context
 }

@@ -20,6 +20,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters.*
 
 import com.netflix.atlas.core.stacklang.Interpreter
+import com.netflix.atlas.core.stacklang.TypedWord
 import com.netflix.atlas.core.stacklang.ast.*
 import org.eclipse.lsp4j.CompletionItem
 import org.eclipse.lsp4j.CompletionItemKind
@@ -95,6 +96,7 @@ class AtlasDocumentAnalyzer(
     }
 
     interpreter.vocabulary
+      .collect { case tw: TypedWord => tw }
       .filter(_.name.startsWith(currentPrefix))
       .filter(_.matches(stack))
       .distinctBy(_.name)

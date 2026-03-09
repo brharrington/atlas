@@ -30,7 +30,7 @@ import com.netflix.spectator.api.histogram.PercentileBuckets
 object MathVocabulary extends Vocabulary {
 
   import com.netflix.atlas.core.model.ModelExtractors.*
-  import com.netflix.atlas.core.stacklang.Extractors.*
+  import com.netflix.atlas.core.stacklang.ast.DataType.*
 
   val name: String = "math"
 

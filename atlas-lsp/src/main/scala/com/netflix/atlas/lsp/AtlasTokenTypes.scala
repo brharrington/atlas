@@ -43,12 +43,12 @@ object AtlasTokenTypes {
   val Comment: Int = 5
 
   private val tokenTypes = java.util.List.of(
-    SemanticTokenTypes.Function,  // Word
-    SemanticTokenTypes.String,    // String
-    SemanticTokenTypes.Number,    // Number
-    SemanticTokenTypes.Operator,  // Parenthesis
-    SemanticTokenTypes.Variable,  // UnknownWord (variable as fallback)
-    SemanticTokenTypes.Comment    // Comment
+    SemanticTokenTypes.Function, // Word
+    SemanticTokenTypes.String, // String
+    SemanticTokenTypes.Number, // Number
+    SemanticTokenTypes.Operator, // Parenthesis
+    SemanticTokenTypes.Variable, // UnknownWord (variable as fallback)
+    SemanticTokenTypes.Comment // Comment
   )
 
   private val tokenModifiers = java.util.List.of[String]()

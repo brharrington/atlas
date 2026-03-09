@@ -123,10 +123,13 @@ class AtlasLspServerSuite extends FunSuite {
   /** Decode the raw LSP integer array into (start, length, tokenType) tuples. */
   private def decodeTokens(data: List[Int]): List[(Int, Int, Int)] = {
     var pos = 0
-    data.grouped(5).map { group =>
-      pos += group(1) // deltaStart (deltaLine is always 0)
-      (pos, group(2), group(3)) // (absoluteStart, length, tokenType)
-    }.toList
+    data
+      .grouped(5)
+      .map { group =>
+        pos += group(1) // deltaStart (deltaLine is always 0)
+        (pos, group(2), group(3)) // (absoluteStart, length, tokenType)
+      }
+      .toList
   }
 
   test("initialize enables semantic tokens") {
@@ -224,8 +227,8 @@ class AtlasLspServerSuite extends FunSuite {
     val commentTokens = tokens.filter(_._3 == AtlasTokenTypes.Comment)
     assertEquals(wordTokens.size, 2) // two fragments of :dup
     assertEquals(commentTokens.size, 1)
-    assertEquals(wordTokens(0), (2, 2, AtlasTokenTypes.Word))   // :d
-    assertEquals(wordTokens(1), (9, 2, AtlasTokenTypes.Word))   // up
+    assertEquals(wordTokens(0), (2, 2, AtlasTokenTypes.Word)) // :d
+    assertEquals(wordTokens(1), (9, 2, AtlasTokenTypes.Word)) // up
     assertEquals(commentTokens.head, (4, 5, AtlasTokenTypes.Comment)) // /*c*/
   }
 }

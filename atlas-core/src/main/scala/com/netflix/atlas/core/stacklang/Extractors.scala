@@ -15,29 +15,15 @@
  */
 package com.netflix.atlas.core.stacklang
 
-import com.netflix.atlas.core.model.MathExpr
+import com.netflix.atlas.core.stacklang.ast.DataType
 
-import scala.util.Try
-
+/** Use DataType.IntType and DataType.DoubleType instead. */
+@deprecated("Use DataType.IntType and DataType.DoubleType instead", "1.9")
 object Extractors {
 
-  case object IntType {
+  @deprecated("Use DataType.IntType instead", "1.9")
+  val IntType: DataType.IntType.type = DataType.IntType
 
-    def unapply(value: Any): Option[Int] = value match {
-      case v: String            => Try(v.toInt).toOption
-      case v: MathExpr.Constant => Some(v.v.toInt)
-      case v: Int               => Some(v)
-      case _                    => None
-    }
-  }
-
-  case object DoubleType {
-
-    def unapply(value: Any): Option[Double] = value match {
-      case v: String            => Try(v.toDouble).toOption
-      case v: MathExpr.Constant => Some(v.v)
-      case v: Double            => Some(v)
-      case _                    => None
-    }
-  }
+  @deprecated("Use DataType.DoubleType instead", "1.9")
+  val DoubleType: DataType.DoubleType.type = DataType.DoubleType
 }

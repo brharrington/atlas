@@ -188,7 +188,9 @@ case class Interpreter(vocabulary: List[Word]) {
             token.value match {
               case "(" =>
                 val (children, rest) = buildListChildren(remaining)
-                val closeToken = rest.headOption.collect { case vt: ValueToken if vt.value == ")" => vt }
+                val closeToken = rest.headOption.collect {
+                  case vt: ValueToken if vt.value == ")" => vt
+                }
                 val diag = if (closeToken.isEmpty) {
                   val d = Diagnostic(token.span, "unmatched opening parenthesis", Severity.Error)
                   diagnostics += d
@@ -196,7 +198,7 @@ case class Interpreter(vocabulary: List[Word]) {
                 } else None
                 // Build the list value from children (strings only, not executed)
                 val listValues = children.collect {
-                  case LiteralNode(t) => t.value
+                  case LiteralNode(t)       => t.value
                   case WordNode(t, _, _, _) => s":${t.value.stripPrefix(":")}"
                 }
                 currentStack = listValues :: currentStack
@@ -208,7 +210,7 @@ case class Interpreter(vocabulary: List[Word]) {
                 val d = Diagnostic(token.span, "unmatched closing parenthesis", Severity.Error)
                 diagnostics += d
                 nodes += LiteralNode(token)
-                // Don't update the stack for unmatched close paren
+              // Don't update the stack for unmatched close paren
               case v if v.startsWith(":") =>
                 val name = v.substring(1)
                 val stackBefore = currentStack
@@ -218,7 +220,13 @@ case class Interpreter(vocabulary: List[Word]) {
                     diagnostics += d
                     nodes += WordNode(token, None, stackBefore, Some(d))
                   case Some(ws) =>
-                    val ctx = Context(this, currentStack, currentVars, currentVars, features = Features.UNSTABLE)
+                    val ctx = Context(
+                      this,
+                      currentStack,
+                      currentVars,
+                      currentVars,
+                      features = Features.UNSTABLE
+                    )
                     try {
                       val result = executeFirstMatchingWord(name, ws, ctx)
                       val matched = ws.find(_.matches(currentStack))
@@ -267,7 +275,9 @@ case class Interpreter(vocabulary: List[Word]) {
                 depth += 1
                 // Nested list: recurse
                 val (children, rest) = buildListChildren(remaining)
-                val closeToken = rest.headOption.collect { case vt: ValueToken if vt.value == ")" => vt }
+                val closeToken = rest.headOption.collect {
+                  case vt: ValueToken if vt.value == ")" => vt
+                }
                 val node = ListNode(token, children, closeToken, None)
                 nodes += node
                 remaining = if (closeToken.isDefined) rest.tail else rest
@@ -596,7 +606,9 @@ object Interpreter {
       } else {
         // Non-comment text: collect until next comment start or segment end
         val fragStart = i
-        while (i < segEnd && !(str.charAt(i) == '/' && i + 1 < segEnd && str.charAt(i + 1) == '*')) {
+        while (
+          i < segEnd && !(str.charAt(i) == '/' && i + 1 < segEnd && str.charAt(i + 1) == '*')
+        ) {
           i += 1
         }
         // Trim whitespace from this fragment

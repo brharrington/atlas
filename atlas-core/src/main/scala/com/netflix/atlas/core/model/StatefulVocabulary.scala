@@ -24,7 +24,7 @@ import com.netflix.atlas.core.util.Strings
 object StatefulVocabulary extends Vocabulary {
 
   import com.netflix.atlas.core.model.ModelExtractors.*
-  import com.netflix.atlas.core.stacklang.Extractors.*
+  import com.netflix.atlas.core.stacklang.ast.DataType.*
 
   val name: String = "stateful"
 
