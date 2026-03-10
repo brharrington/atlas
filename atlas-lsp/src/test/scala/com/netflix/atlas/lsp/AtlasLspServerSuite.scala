@@ -274,6 +274,40 @@ class AtlasLspServerSuite extends FunSuite {
   }
 
   //
+  // compress expression
+  //
+
+  private def compress(text: String): String = {
+    val server = newServer
+    val tree = server.interpreter().syntaxTree(text)
+    server.analyzer().compressExpression(text, tree.nodes)
+  }
+
+  test("compress: strips whitespace around tokens") {
+    assertEquals(compress("a  ,  b  ,  :swap"), "a,b,:swap")
+  }
+
+  test("compress: removes empty tokens") {
+    assertEquals(compress("a,b,,,:dup,"), "a,b,:dup")
+  }
+
+  test("compress: removes line breaks") {
+    assertEquals(compress("a,\nb,\n:swap"), "a,b,:swap")
+  }
+
+  test("compress: preserves comments") {
+    assertEquals(compress("a , /* hi */ , b"), "a,/* hi */,b")
+  }
+
+  test("compress: preserves lists") {
+    assertEquals(compress("( , a , b , )"), "(,a,b,)")
+  }
+
+  test("compress: already compressed unchanged") {
+    assertEquals(compress("a,b,:swap"), "a,b,:swap")
+  }
+
+  //
   // format expression (unit tests via analyzer)
   //
 

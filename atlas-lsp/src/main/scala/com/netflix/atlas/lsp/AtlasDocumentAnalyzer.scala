@@ -90,16 +90,59 @@ class AtlasDocumentAnalyzer(
     val tree = interpreter.syntaxTree(text)
     val hasErrors = tree.diagnostics.exists(_.severity == Severity.Error)
     if (hasErrors) return Nil
+    val actions = List.newBuilder[Either[Command, CodeAction]]
+    val range = new Range(new Position(0, 0), offsetToPosition(text, text.length))
+
     val formatted = formatExpression(text, tree.nodes)
-    if (formatted == text) Nil
-    else {
-      val range = new Range(new Position(0, 0), offsetToPosition(text, text.length))
+    if (formatted != text) {
       val edit = new TextEdit(range, formatted)
       val wsEdit = new WorkspaceEdit(java.util.Map.of(uri, java.util.List.of(edit)))
       val action = new CodeAction("Format expression")
       action.setKind(CodeActionKind.RefactorRewrite)
       action.setEdit(wsEdit)
-      List(Either.forRight(action))
+      actions += Either.forRight(action)
+    }
+
+    val compressed = compressExpression(text, tree.nodes)
+    if (compressed != text) {
+      val edit = new TextEdit(range, compressed)
+      val wsEdit = new WorkspaceEdit(java.util.Map.of(uri, java.util.List.of(edit)))
+      val action = new CodeAction("Compress expression")
+      action.setKind(CodeActionKind.RefactorRewrite)
+      action.setEdit(wsEdit)
+      actions += Either.forRight(action)
+    }
+
+    actions.result()
+  }
+
+  // --- Expression compressor ---
+
+  /** Compress an expression by stripping whitespace, empty tokens, and line breaks. */
+  private[lsp] def compressExpression(expr: String, nodes: List[SyntaxNode]): String = {
+    val parts = List.newBuilder[String]
+    compressNodes(expr, nodes, parts)
+    parts.result().mkString(",")
+  }
+
+  private def compressNodes(
+    expr: String,
+    nodes: List[SyntaxNode],
+    parts: collection.mutable.Builder[String, List[String]]
+  ): Unit = {
+    nodes.foreach {
+      case LiteralNode(token) =>
+        val v = token.value.trim
+        if (v.nonEmpty) parts += v
+      case WordNode(token, _, _, _) =>
+        val v = token.value.trim
+        if (v.nonEmpty) parts += v
+      case CommentNode(token) =>
+        parts += expr.substring(token.span.start, token.span.end)
+      case ListNode(_, children, close, _) =>
+        parts += "("
+        compressNodes(expr, children, parts)
+        if (close.isDefined) parts += ")"
     }
   }
 
