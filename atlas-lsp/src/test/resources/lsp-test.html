@@ -194,7 +194,7 @@
             }
           });
 
-          // Request initial semantic tokens and completions
+          // Request initial semantic tokens, completions, and code actions
           requestSemanticTokens();
           requestCompletions();
         };
@@ -436,6 +436,54 @@
           el.innerHTML += `<div class="item" style="color:#666">... and ${items.length - 30} more</div>`;
         }
       }
+
+      // --- Code Actions (via Monaco lightbulb / Cmd+.) ---
+
+      monaco.languages.registerCodeActionProvider('atlas', {
+        provideCodeActions: async function (model, range, context, token) {
+          if (!initialized) return { actions: [], dispose: function () {} };
+          try {
+            const text = model.getValue();
+            const lastPos = model.getPositionAt(text.length);
+            const result = await sendRequest('textDocument/codeAction', {
+              textDocument: { uri: DOC_URI },
+              range: {
+                start: { line: 0, character: 0 },
+                end: { line: lastPos.lineNumber - 1, character: lastPos.column - 1 }
+              },
+              context: { diagnostics: [] }
+            });
+            const lspActions = result || [];
+            const actions = lspActions.map(function (item) {
+              const action = item.right || item;
+              const workspaceEdits = [];
+              const changes = action.edit && action.edit.changes;
+              if (changes && changes[DOC_URI]) {
+                changes[DOC_URI].forEach(function (edit) {
+                  workspaceEdits.push({
+                    resource: model.uri,
+                    textEdit: {
+                      range: new monaco.Range(
+                        edit.range.start.line + 1, edit.range.start.character + 1,
+                        edit.range.end.line + 1, edit.range.end.character + 1
+                      ),
+                      text: edit.newText
+                    }
+                  });
+                });
+              }
+              return {
+                title: action.title,
+                kind: 'refactor.rewrite',
+                edit: { edits: workspaceEdits }
+              };
+            });
+            return { actions: actions, dispose: function () {} };
+          } catch (e) {
+            return { actions: [], dispose: function () {} };
+          }
+        }
+      });
 
       function escapeHtml(s) {
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

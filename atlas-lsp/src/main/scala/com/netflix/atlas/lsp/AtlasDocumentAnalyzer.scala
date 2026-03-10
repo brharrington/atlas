@@ -19,15 +19,22 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.jdk.CollectionConverters.*
 
+import com.netflix.atlas.core.util.Features
 import com.netflix.atlas.core.stacklang.Interpreter
 import com.netflix.atlas.core.stacklang.TypedWord
 import com.netflix.atlas.core.stacklang.ast.*
+import org.eclipse.lsp4j.CodeAction
+import org.eclipse.lsp4j.CodeActionKind
+import org.eclipse.lsp4j.Command
 import org.eclipse.lsp4j.CompletionItem
 import org.eclipse.lsp4j.CompletionItemKind
 import org.eclipse.lsp4j.DiagnosticSeverity
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.PublishDiagnosticsParams
 import org.eclipse.lsp4j.Range
+import org.eclipse.lsp4j.TextEdit
+import org.eclipse.lsp4j.WorkspaceEdit
+import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.services.LanguageClient
 
 /**
@@ -76,6 +83,27 @@ class AtlasDocumentAnalyzer(
     }
     System.err.println(s"DIAG: publishing ${diags.size} diagnostics for: $text")
     client.publishDiagnostics(new PublishDiagnosticsParams(uri, diags.asJava))
+  }
+
+  private[lsp] def computeCodeActions(uri: String): List[Either[Command, CodeAction]] = {
+    val text = getText(uri)
+    if (text.isEmpty) return Nil
+    try {
+      val context = interpreter.execute(text, features = Features.UNSTABLE)
+      val normalized = Interpreter.toString(context.stack)
+      if (normalized == text) Nil
+      else {
+        val range = new Range(new Position(0, 0), offsetToPosition(text, text.length))
+        val edit = new TextEdit(range, normalized)
+        val wsEdit = new WorkspaceEdit(java.util.Map.of(uri, java.util.List.of(edit)))
+        val action = new CodeAction("Format expression")
+        action.setKind(CodeActionKind.RefactorRewrite)
+        action.setEdit(wsEdit)
+        List(Either.forRight(action))
+      }
+    } catch {
+      case _: Exception => Nil
+    }
   }
 
   private[lsp] def computeCompletions(text: String, offset: Int): List[CompletionItem] = {

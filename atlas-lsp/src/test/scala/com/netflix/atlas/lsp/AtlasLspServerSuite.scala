@@ -18,10 +18,13 @@ package com.netflix.atlas.lsp
 import scala.jdk.CollectionConverters.*
 
 import com.netflix.atlas.core.stacklang.StandardVocabulary
+import org.eclipse.lsp4j.CodeActionContext
+import org.eclipse.lsp4j.CodeActionParams
 import org.eclipse.lsp4j.CompletionParams
 import org.eclipse.lsp4j.DidOpenTextDocumentParams
 import org.eclipse.lsp4j.InitializeParams
 import org.eclipse.lsp4j.Position
+import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.SemanticTokensParams
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.TextDocumentItem
@@ -229,5 +232,57 @@ class AtlasLspServerSuite extends FunSuite {
     assertEquals(wordTokens(0), (2, 2, AtlasTokenTypes.Word)) // :d
     assertEquals(wordTokens(1), (9, 2, AtlasTokenTypes.Word)) // up
     assertEquals(commentTokens.head, (4, 5, AtlasTokenTypes.Comment)) // /*c*/
+  }
+
+  //
+  // code actions
+  //
+
+  private def requestCodeActions(
+    server: AtlasLspServer,
+    uri: String
+  ): java.util.List[?] = {
+    val text = server.analyzer().getText(uri)
+    val params = new CodeActionParams
+    params.setTextDocument(new TextDocumentIdentifier(uri))
+    params.setRange(new Range(new Position(0, 0), new Position(0, text.length)))
+    params.setContext(new CodeActionContext(java.util.List.of()))
+    server.getTextDocumentService.codeAction(params).get()
+  }
+
+  test("initialize enables code actions") {
+    val server = newServer
+    val result = server.initialize(new InitializeParams).get()
+    assertNotEquals(result.getCapabilities.getCodeActionProvider, null)
+  }
+
+  test("codeAction: format normalizes expression") {
+    val server = newServer
+    val uri = "expr:ca1"
+    openDocument(server, uri, "a,b,:swap")
+    val actions = requestCodeActions(server, uri)
+    assertEquals(actions.size(), 1)
+    val action = actions.get(0).asInstanceOf[org.eclipse.lsp4j.jsonrpc.messages.Either[?, ?]]
+    val codeAction = action.getRight.asInstanceOf[org.eclipse.lsp4j.CodeAction]
+    assertEquals(codeAction.getTitle, "Format expression")
+    val edits = codeAction.getEdit.getChanges.get(uri)
+    assertEquals(edits.size(), 1)
+    assertEquals(edits.get(0).getNewText, "b,a")
+  }
+
+  test("codeAction: no action when already normalized") {
+    val server = newServer
+    val uri = "expr:ca2"
+    openDocument(server, uri, "b,a")
+    val actions = requestCodeActions(server, uri)
+    assertEquals(actions.size(), 0)
+  }
+
+  test("codeAction: no action on invalid expression") {
+    val server = newServer
+    val uri = "expr:ca3"
+    openDocument(server, uri, ":unknown")
+    val actions = requestCodeActions(server, uri)
+    assertEquals(actions.size(), 0)
   }
 }

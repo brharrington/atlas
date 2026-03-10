@@ -21,6 +21,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.netflix.atlas.core.stacklang.Interpreter;
 import com.netflix.atlas.core.stacklang.Vocabulary;
+import org.eclipse.lsp4j.CodeActionKind;
+import org.eclipse.lsp4j.CodeActionOptions;
 import org.eclipse.lsp4j.CompletionOptions;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
@@ -75,6 +77,8 @@ public class AtlasLspServer implements LanguageServer, LanguageClientAware {
         semanticTokensOptions.setLegend(AtlasTokenTypes.legend());
         semanticTokensOptions.setFull(true);
         capabilities.setSemanticTokensProvider(semanticTokensOptions);
+        var codeActionOptions = new CodeActionOptions(List.of(CodeActionKind.RefactorRewrite));
+        capabilities.setCodeActionProvider(codeActionOptions);
         return CompletableFuture.completedFuture(new InitializeResult(capabilities));
     }
 

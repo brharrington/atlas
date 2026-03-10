@@ -17,6 +17,9 @@ package com.netflix.atlas.lsp;
 
 import java.util.concurrent.CompletableFuture;
 
+import org.eclipse.lsp4j.CodeAction;
+import org.eclipse.lsp4j.CodeActionParams;
+import org.eclipse.lsp4j.Command;
 import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionParams;
@@ -83,6 +86,15 @@ public class AtlasTextDocumentService implements TextDocumentService {
         var result = Either.<java.util.List<CompletionItem>, CompletionList>forLeft(
                 new java.util.ArrayList<>(javaItems));
         return CompletableFuture.completedFuture(result);
+    }
+
+    @Override
+    public CompletableFuture<java.util.List<Either<Command, CodeAction>>> codeAction(
+            CodeActionParams params) {
+        var uri = params.getTextDocument().getUri();
+        var actions = analyzer.computeCodeActions(uri);
+        var javaActions = CollectionConverters.asJava(actions);
+        return CompletableFuture.completedFuture(new java.util.ArrayList<>(javaActions));
     }
 
     @Override
