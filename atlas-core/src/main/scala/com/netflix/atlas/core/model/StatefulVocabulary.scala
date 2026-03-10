@@ -15,16 +15,21 @@
  */
 package com.netflix.atlas.core.model
 
-import com.netflix.atlas.core.stacklang.SimpleWord
+import java.time.Duration
+
+import scala.collection.immutable.ArraySeq
+
+import com.netflix.atlas.core.stacklang.Context
 import com.netflix.atlas.core.stacklang.StandardVocabulary.Macro
+import com.netflix.atlas.core.stacklang.TypedWord
 import com.netflix.atlas.core.stacklang.Vocabulary
 import com.netflix.atlas.core.stacklang.Word
-import com.netflix.atlas.core.util.Strings
+import com.netflix.atlas.core.stacklang.ast.DataType
+import com.netflix.atlas.core.stacklang.ast.Parameter
 
 object StatefulVocabulary extends Vocabulary {
 
   import com.netflix.atlas.core.model.ModelDataTypes.*
-  import com.netflix.atlas.core.stacklang.ast.DataType.*
 
   val name: String = "stateful"
 
@@ -59,19 +64,21 @@ object StatefulVocabulary extends Vocabulary {
     Macro(name, fullBody, example)
   }
 
-  case object Delay extends SimpleWord {
+  case object Delay extends TypedWord with StylePassthrough {
 
     override def name: String = "delay"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case IntType(_) :: TimeSeriesExprType(_) :: _ => true
-      case IntType(_) :: (_: StyleExpr) :: _        => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType),
+      Parameter("n", "number of datapoints to delay", DataType.IntType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case IntType(v) :: TimeSeriesExprType(t) :: s => StatefulExpr.Delay(t, v) :: s
-      case IntType(v) :: (t: StyleExpr) :: s =>
-        t.copy(expr = StatefulExpr.Delay(t.expr, v)) :: s
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      val v = params(1).asInstanceOf[Int]
+      context.copy(stack = StatefulExpr.Delay(t, v) :: context.stack)
     }
 
     override def summary: String =
@@ -89,25 +96,24 @@ object StatefulVocabulary extends Vocabulary {
         | Since: 1.6
       """.stripMargin.trim
 
-    override def signature: String =
-      "TimeSeriesExpr n:Int -- TimeSeriesExpr"
-
     override def examples: List[String] = List("name,requestsPerSecond,:eq,:sum,5")
   }
 
-  case object RollingCount extends SimpleWord {
+  case object RollingCount extends TypedWord with StylePassthrough {
 
     override def name: String = "rolling-count"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case IntType(_) :: TimeSeriesExprType(_) :: _ => true
-      case IntType(_) :: (_: StyleExpr) :: _        => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType),
+      Parameter("n", "window size", DataType.IntType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case IntType(v) :: TimeSeriesExprType(t) :: s => StatefulExpr.RollingCount(t, v) :: s
-      case IntType(v) :: (t: StyleExpr) :: s =>
-        t.copy(expr = StatefulExpr.RollingCount(t.expr, v)) :: s
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      val v = params(1).asInstanceOf[Int]
+      context.copy(stack = StatefulExpr.RollingCount(t, v) :: context.stack)
     }
 
     override def summary: String =
@@ -148,24 +154,24 @@ object StatefulVocabulary extends Vocabulary {
         |
       """.stripMargin.trim
 
-    override def signature: String = "TimeSeriesExpr n:Int -- TimeSeriesExpr"
-
     override def examples: List[String] = List(":random,0.4,:gt,5")
   }
 
-  case object RollingMin extends SimpleWord {
+  case object RollingMin extends TypedWord with StylePassthrough {
 
     override def name: String = "rolling-min"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case IntType(_) :: TimeSeriesExprType(_) :: _ => true
-      case IntType(_) :: (_: StyleExpr) :: _        => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType),
+      Parameter("n", "window size", DataType.IntType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case IntType(v) :: TimeSeriesExprType(t) :: s => StatefulExpr.RollingMin(t, v) :: s
-      case IntType(v) :: (t: StyleExpr) :: s =>
-        t.copy(expr = StatefulExpr.RollingMin(t.expr, v)) :: s
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      val v = params(1).asInstanceOf[Int]
+      context.copy(stack = StatefulExpr.RollingMin(t, v) :: context.stack)
     }
 
     override def summary: String =
@@ -204,24 +210,24 @@ object StatefulVocabulary extends Vocabulary {
         |Since: 1.6
       """.stripMargin.trim
 
-    override def signature: String = "TimeSeriesExpr n:Int -- TimeSeriesExpr"
-
     override def examples: List[String] = List("name,sps,:eq,:sum,5")
   }
 
-  case object RollingMax extends SimpleWord {
+  case object RollingMax extends TypedWord with StylePassthrough {
 
     override def name: String = "rolling-max"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case IntType(_) :: TimeSeriesExprType(_) :: _ => true
-      case IntType(_) :: (_: StyleExpr) :: _        => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType),
+      Parameter("n", "window size", DataType.IntType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case IntType(v) :: TimeSeriesExprType(t) :: s => StatefulExpr.RollingMax(t, v) :: s
-      case IntType(v) :: (t: StyleExpr) :: s =>
-        t.copy(expr = StatefulExpr.RollingMax(t.expr, v)) :: s
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      val v = params(1).asInstanceOf[Int]
+      context.copy(stack = StatefulExpr.RollingMax(t, v) :: context.stack)
     }
 
     override def summary: String =
@@ -260,25 +266,26 @@ object StatefulVocabulary extends Vocabulary {
         |Since: 1.6
       """.stripMargin.trim
 
-    override def signature: String = "TimeSeriesExpr n:Int -- TimeSeriesExpr"
-
     override def examples: List[String] = List("name,sps,:eq,:sum,5")
   }
 
-  case object RollingMean extends SimpleWord {
+  case object RollingMean extends TypedWord with StylePassthrough {
 
     override def name: String = "rolling-mean"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case IntType(_) :: IntType(_) :: TimeSeriesExprType(_) :: _ => true
-      case IntType(_) :: IntType(_) :: (_: StyleExpr) :: _        => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType),
+      Parameter("n", "window size", DataType.IntType),
+      Parameter("minNumValues", "minimum non-NaN values required", DataType.IntType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case IntType(m) :: IntType(n) :: TimeSeriesExprType(t) :: s =>
-        StatefulExpr.RollingMean(t, n, m) :: s
-      case IntType(m) :: IntType(n) :: (t: StyleExpr) :: s =>
-        t.copy(expr = StatefulExpr.RollingMean(t.expr, n, m)) :: s
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      val n = params(1).asInstanceOf[Int]
+      val m = params(2).asInstanceOf[Int]
+      context.copy(stack = StatefulExpr.RollingMean(t, n, m) :: context.stack)
     }
 
     override def summary: String =
@@ -309,25 +316,24 @@ object StatefulVocabulary extends Vocabulary {
         |Since: 1.6
       """.stripMargin.trim
 
-    override def signature: String = "TimeSeriesExpr n:Int minNumValues:Int -- TimeSeriesExpr"
-
     override def examples: List[String] = List("name,sps,:eq,:sum,5,3")
   }
 
-  case object RollingSum extends SimpleWord {
+  case object RollingSum extends TypedWord with StylePassthrough {
 
     override def name: String = "rolling-sum"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case IntType(_) :: TimeSeriesExprType(_) :: _ => true
-      case IntType(_) :: (_: StyleExpr) :: _        => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType),
+      Parameter("n", "window size", DataType.IntType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case IntType(n) :: TimeSeriesExprType(t) :: s =>
-        StatefulExpr.RollingSum(t, n) :: s
-      case IntType(n) :: (t: StyleExpr) :: s =>
-        t.copy(expr = StatefulExpr.RollingSum(t.expr, n)) :: s
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      val n = params(1).asInstanceOf[Int]
+      context.copy(stack = StatefulExpr.RollingSum(t, n) :: context.stack)
     }
 
     override def summary: String =
@@ -355,25 +361,28 @@ object StatefulVocabulary extends Vocabulary {
         |Since: 1.6
       """.stripMargin.trim
 
-    override def signature: String = "TimeSeriesExpr n:Int minNumValues:Int -- TimeSeriesExpr"
-
     override def examples: List[String] = List("name,sps,:eq,:sum,5,3")
   }
 
-  case object Des extends SimpleWord {
+  case object Des extends TypedWord with StylePassthrough {
 
     override def name: String = "des"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case (_: String) :: (_: String) :: (_: String) :: TimeSeriesExprType(_) :: _ => true
-      case (_: String) :: (_: String) :: (_: String) :: (_: StyleExpr) :: _        => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType),
+      Parameter("training", "training window size", DataType.IntType),
+      Parameter("alpha", "data smoothing factor", DataType.DoubleType),
+      Parameter("beta", "trend smoothing factor", DataType.DoubleType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case DoubleType(b) :: DoubleType(a) :: IntType(n) :: TimeSeriesExprType(t) :: s =>
-        StatefulExpr.Des(t, n, a, b) :: s
-      case DoubleType(b) :: DoubleType(a) :: IntType(n) :: (t: StyleExpr) :: s =>
-        t.copy(StatefulExpr.Des(t.expr, n, a, b)) :: s
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      val n = params(1).asInstanceOf[Int]
+      val a = params(2).asInstanceOf[Double]
+      val b = params(3).asInstanceOf[Double]
+      context.copy(stack = StatefulExpr.Des(t, n, a, b) :: context.stack)
     }
 
     override def summary: String =
@@ -382,26 +391,28 @@ object StatefulVocabulary extends Vocabulary {
         |should be used instead to ensure a deterministic prediction.
       """.stripMargin.trim
 
-    override def signature: String =
-      "TimeSeriesExpr training:Int alpha:Double beta:Double -- TimeSeriesExpr"
-
     override def examples: List[String] = List("name,requestsPerSecond,:eq,:sum,5,0.1,0.5")
   }
 
-  case object SlidingDes extends SimpleWord {
+  case object SlidingDes extends TypedWord with StylePassthrough {
 
     override def name: String = "sdes"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case (_: String) :: (_: String) :: (_: String) :: TimeSeriesExprType(_) :: _ => true
-      case (_: String) :: (_: String) :: (_: String) :: (_: StyleExpr) :: _        => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType),
+      Parameter("training", "training window size", DataType.IntType),
+      Parameter("alpha", "data smoothing factor", DataType.DoubleType),
+      Parameter("beta", "trend smoothing factor", DataType.DoubleType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case DoubleType(b) :: DoubleType(a) :: IntType(n) :: TimeSeriesExprType(t) :: s =>
-        StatefulExpr.SlidingDes(t, n, a, b) :: s
-      case DoubleType(b) :: DoubleType(a) :: IntType(n) :: (t: StyleExpr) :: s =>
-        t.copy(expr = StatefulExpr.SlidingDes(t.expr, n, a, b)) :: s
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      val n = params(1).asInstanceOf[Int]
+      val a = params(2).asInstanceOf[Double]
+      val b = params(3).asInstanceOf[Double]
+      context.copy(stack = StatefulExpr.SlidingDes(t, n, a, b) :: context.stack)
     }
 
     override def summary: String =
@@ -448,26 +459,24 @@ object StatefulVocabulary extends Vocabulary {
         |Since: 1.5.0
       """.stripMargin.trim
 
-    override def signature: String =
-      "TimeSeriesExpr training:Int alpha:Double beta:Double -- TimeSeriesExpr"
-
     override def examples: List[String] = List("name,requestsPerSecond,:eq,:sum,5,0.1,0.5")
   }
 
-  case object Trend extends SimpleWord {
+  case object Trend extends TypedWord with StylePassthrough {
 
     override def name: String = "trend"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case (_: String) :: TimeSeriesExprType(_) :: _ => true
-      case (_: String) :: (_: StyleExpr) :: _        => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType),
+      Parameter("window", "moving average window", DataType.DurationType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case (v: String) :: TimeSeriesExprType(t) :: s =>
-        StatefulExpr.Trend(t, Strings.parseDuration(v)) :: s
-      case (v: String) :: (t: StyleExpr) :: s =>
-        t.copy(expr = StatefulExpr.Trend(t.expr, Strings.parseDuration(v))) :: s
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      val d = params(1).asInstanceOf[Duration]
+      context.copy(stack = StatefulExpr.Trend(t, d) :: context.stack)
     }
 
     override def summary: String =
@@ -497,24 +506,22 @@ object StatefulVocabulary extends Vocabulary {
         |per average. A step size larger than the window will result in the trend being a no-op.
       """.stripMargin.trim
 
-    override def signature: String =
-      "TimeSeriesExpr window:Duration -- TimeSeriesExpr"
-
     override def examples: List[String] = List(":random,PT5M", ":random,20m")
   }
 
-  case object Integral extends SimpleWord {
+  case object Integral extends TypedWord with StylePassthrough {
 
     override def name: String = "integral"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case TimeSeriesExprType(_) :: _ => true
-      case (_: StyleExpr) :: _        => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case TimeSeriesExprType(t) :: s => StatefulExpr.Integral(t) :: s
-      case (t: StyleExpr) :: s        => t.copy(expr = StatefulExpr.Integral(t.expr)) :: s
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      context.copy(stack = StatefulExpr.Integral(t) :: context.stack)
     }
 
     override def summary: String =
@@ -544,24 +551,22 @@ object StatefulVocabulary extends Vocabulary {
         |This conversion can be performed using the [:per-step](math-per‐step) operation.
       """.stripMargin.trim
 
-    override def signature: String =
-      "TimeSeriesExpr -- TimeSeriesExpr"
-
     override def examples: List[String] = List("1", "name,requestsPerSecond,:eq,:sum,:per-step")
   }
 
-  case object Derivative extends SimpleWord {
+  case object Derivative extends TypedWord with StylePassthrough {
 
     override def name: String = "derivative"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case TimeSeriesExprType(_) :: _ => true
-      case (_: StyleExpr) :: _        => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case TimeSeriesExprType(t) :: s => StatefulExpr.Derivative(t) :: s
-      case (t: StyleExpr) :: s        => t.copy(expr = StatefulExpr.Derivative(t.expr)) :: s
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      context.copy(stack = StatefulExpr.Derivative(t) :: context.stack)
     }
 
     override def summary: String =
@@ -569,9 +574,6 @@ object StatefulVocabulary extends Vocabulary {
         |Opposite of [:integral](stateful-integral). Computes the rate of change per step of the
         |input time series.
       """.stripMargin.trim
-
-    override def signature: String =
-      "TimeSeriesExpr -- TimeSeriesExpr"
 
     override def examples: List[String] = List("1", "1,:integral")
   }

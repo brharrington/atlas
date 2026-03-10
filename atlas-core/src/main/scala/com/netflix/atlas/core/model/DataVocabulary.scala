@@ -20,7 +20,6 @@ import scala.collection.immutable.ArraySeq
 import com.netflix.atlas.core.model.DataExpr.AggregateFunction
 import com.netflix.atlas.core.model.MathExpr.NamedRewrite
 import com.netflix.atlas.core.stacklang.Context
-import com.netflix.atlas.core.stacklang.SimpleWord
 import com.netflix.atlas.core.stacklang.TypedWord
 import com.netflix.atlas.core.stacklang.Vocabulary
 import com.netflix.atlas.core.stacklang.Word
@@ -30,7 +29,6 @@ import com.netflix.atlas.core.stacklang.ast.Parameter
 object DataVocabulary extends Vocabulary {
 
   import com.netflix.atlas.core.model.ModelDataTypes.*
-  import com.netflix.atlas.core.stacklang.ast.DataType.*
 
   val name: String = "data"
 
@@ -199,20 +197,21 @@ object DataVocabulary extends Vocabulary {
       )
   }
 
-  case object Offset extends SimpleWord {
+  case object Offset extends TypedWord with StylePassthrough {
 
     override def name: String = "offset"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case DurationType(_) :: TimeSeriesExprType(_) :: _ => true
-      case DurationType(_) :: PresentationType(_) :: _   => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType),
+      Parameter("dur", "offset duration", DataType.DurationType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case DurationType(d) :: TimeSeriesExprType(t) :: stack =>
-        t.withOffset(d) :: stack
-      case DurationType(d) :: PresentationType(t) :: stack =>
-        t.copy(expr = t.expr.withOffset(d)) :: stack
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      val d = params(1).asInstanceOf[java.time.Duration]
+      context.copy(stack = t.withOffset(d) :: context.stack)
     }
 
     override def summary: String =
@@ -220,8 +219,6 @@ object DataVocabulary extends Vocabulary {
         |Shift the time frame to use when fetching the data. This is used to look at a previous
         |interval as a point of reference, e.g., day-over-day or week-over-week.
       """.stripMargin.trim
-
-    override def signature: String = "TimeSeriesExpr Duration -- TimeSeriesExpr"
 
     override def examples: List[String] =
       List("name,sps,:eq,(,name,),:by,1w", "name,sps,:eq,:max,PT1H")

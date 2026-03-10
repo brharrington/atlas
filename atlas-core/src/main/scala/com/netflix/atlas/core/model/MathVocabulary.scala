@@ -617,19 +617,21 @@ object MathVocabulary extends Vocabulary {
     override def examples: List[String] = Nil
   }
 
-  case object ClampMin extends SimpleWord {
+  case object ClampMin extends TypedWord with StylePassthrough {
 
     override def name: String = "clamp-min"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case DoubleType(_) :: TimeSeriesExprType(_) :: _ => true
-      case DoubleType(_) :: (_: StyleExpr) :: _        => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType),
+      Parameter("min", "minimum value", DataType.DoubleType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case DoubleType(mn) :: TimeSeriesExprType(t) :: stack => MathExpr.ClampMin(t, mn) :: stack
-      case DoubleType(mn) :: (t: StyleExpr) :: stack =>
-        t.copy(expr = MathExpr.ClampMin(t.expr, mn)) :: stack
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      val mn = params(1).asInstanceOf[Double]
+      context.copy(stack = MathExpr.ClampMin(t, mn) :: context.stack)
     }
 
     override def summary: String =
@@ -640,24 +642,24 @@ object MathVocabulary extends Vocabulary {
         |For more details see [:clamp-max](math-clamp‐max).
       """.stripMargin.trim
 
-    override def signature: String = "TimeSeriesExpr Double -- TimeSeriesExpr"
-
     override def examples: List[String] = List("name,sps,:eq,:sum,200e3")
   }
 
-  case object ClampMax extends SimpleWord {
+  case object ClampMax extends TypedWord with StylePassthrough {
 
     override def name: String = "clamp-max"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case DoubleType(_) :: TimeSeriesExprType(_) :: _ => true
-      case DoubleType(_) :: (_: StyleExpr) :: _        => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType),
+      Parameter("max", "maximum value", DataType.DoubleType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case DoubleType(mx) :: TimeSeriesExprType(t) :: stack => MathExpr.ClampMax(t, mx) :: stack
-      case DoubleType(mx) :: (t: StyleExpr) :: stack =>
-        t.copy(expr = MathExpr.ClampMax(t.expr, mx)) :: stack
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      val mx = params(1).asInstanceOf[Double]
+      context.copy(stack = MathExpr.ClampMax(t, mx) :: context.stack)
     }
 
     override def summary: String =
@@ -690,38 +692,30 @@ object MathVocabulary extends Vocabulary {
         |![Spike with 25,:clamp-max](images/clamp-max-25.png)
       """.stripMargin.trim
 
-    override def signature: String = "TimeSeriesExpr Double -- TimeSeriesExpr"
-
     override def examples: List[String] = List("name,sps,:eq,:sum,200e3")
   }
 
-  sealed trait UnaryWord extends SimpleWord {
+  sealed trait UnaryWord extends TypedWord with StylePassthrough {
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case TimeSeriesExprType(_) :: _ => true
-      case (_: StyleExpr) :: _        => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType)
+    )
+
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
 
     def newInstance(t: TimeSeriesExpr): MathExpr.UnaryMathExpr
 
-    protected def execute(t: TimeSeriesExpr, stack: List[Any]): List[Any] = {
-      t match {
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      val result = t match {
         case c: MathExpr.Constant =>
           // Precompute math on constants
-          MathExpr.Constant(newInstance(c)(c.v)) :: stack
+          MathExpr.Constant(newInstance(c)(c.v))
         case _ =>
-          newInstance(t) :: stack
+          newInstance(t)
       }
+      context.copy(stack = result :: context.stack)
     }
-
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case TimeSeriesExprType(t) :: stack =>
-        execute(t, stack)
-      case (t: StyleExpr) :: stack =>
-        t.copy(expr = newInstance(t.expr)) :: stack
-    }
-
-    override def signature: String = "TimeSeriesExpr -- TimeSeriesExpr"
 
     override def examples: List[String] = List("0", "64", "-64")
   }
@@ -784,9 +778,10 @@ object MathVocabulary extends Vocabulary {
 
     def newInstance(t: TimeSeriesExpr): MathExpr.UnaryMathExpr = MathExpr.PerStep(t)
 
-    override protected def execute(t: TimeSeriesExpr, stack: List[Any]): List[Any] = {
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
       // Cannot be precomputed as the step size depends on the execution context
-      newInstance(t) :: stack
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      context.copy(stack = newInstance(t) :: context.stack)
     }
 
     override def summary: String =
@@ -797,41 +792,29 @@ object MathVocabulary extends Vocabulary {
       """.stripMargin.trim
   }
 
-  sealed trait BinaryWord extends SimpleWord {
+  sealed trait BinaryWord extends TypedWord with StylePassthrough {
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case TimeSeriesExprType(_) :: TimeSeriesExprType(_) :: _ => true
-      case (_: StyleExpr) :: TimeSeriesExprType(_) :: _        => true
-      case TimeSeriesExprType(_) :: (_: StyleExpr) :: _        => true
-      case (_: StyleExpr) :: (_: StyleExpr) :: _               => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("t1", "first input", TimeSeriesExprType),
+      Parameter("t2", "second input", TimeSeriesExprType)
+    )
+
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
 
     def newInstance(t1: TimeSeriesExpr, t2: TimeSeriesExpr): MathExpr.BinaryMathExpr
 
-    private def execute(t1: TimeSeriesExpr, t2: TimeSeriesExpr, stack: List[Any]): List[Any] = {
-      (t1, t2) match {
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t1 = params(0).asInstanceOf[TimeSeriesExpr]
+      val t2 = params(1).asInstanceOf[TimeSeriesExpr]
+      val result = (t1, t2) match {
         case (c1: MathExpr.Constant, c2: MathExpr.Constant) =>
           // Precompute math on constants
-          MathExpr.Constant(newInstance(c1, c2)(c1.v, c2.v)) :: stack
+          MathExpr.Constant(newInstance(c1, c2)(c1.v, c2.v))
         case _ =>
-          newInstance(t1, t2) :: stack
+          newInstance(t1, t2)
       }
+      context.copy(stack = result :: context.stack)
     }
-
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case TimeSeriesExprType(t2) :: TimeSeriesExprType(t1) :: stack =>
-        execute(t1, t2, stack)
-      case (t2: StyleExpr) :: TimeSeriesExprType(t1) :: stack =>
-        t2.copy(expr = newInstance(t1, t2.expr)) :: stack
-      case TimeSeriesExprType(t2) :: (t1: StyleExpr) :: stack =>
-        t1.copy(expr = newInstance(t1.expr, t2)) :: stack
-      case (t2: StyleExpr) :: (t1: StyleExpr) :: stack =>
-        // If both sides have presentation, strip the presentation settings to avoid
-        // confusion as to which settings will get used.
-        newInstance(t1.expr, t2.expr) :: stack
-    }
-
-    override def signature: String = "TimeSeriesExpr TimeSeriesExpr -- TimeSeriesExpr"
 
     override def examples: List[String] =
       List("name,sps,:eq,42", "name,sps,:eq,:sum,name,requestsPerSecond,:eq,:max,(,name,),:by")
@@ -1121,27 +1104,28 @@ object MathVocabulary extends Vocabulary {
       """.stripMargin.trim
   }
 
-  sealed trait AggrWord extends SimpleWord {
+  sealed trait AggrWord extends TypedWord with StylePassthrough {
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case (_: TimeSeriesExpr) :: _ => true
-      case (_: StyleExpr) :: _      => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType)
+    )
+
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
 
     def newInstance(t: TimeSeriesExpr): TimeSeriesExpr
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case (a: DataExpr.AggregateFunction) :: stack if this != Count =>
-        // If applied to a base aggregate function, then it will be a single line
-        // and be a noop unless it is a count.
-        a :: stack
-      case (t: TimeSeriesExpr) :: stack =>
-        newInstance(t) :: stack
-      case (t: StyleExpr) :: stack =>
-        t.copy(expr = newInstance(t.expr)) :: stack
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      val result = t match {
+        case a: DataExpr.AggregateFunction if this != Count =>
+          // If applied to a base aggregate function, then it will be a single line
+          // and be a noop unless it is a count.
+          a
+        case _ =>
+          newInstance(t)
+      }
+      context.copy(stack = result :: context.stack)
     }
-
-    override def signature: String = "TimeSeriesExpr -- TimeSeriesExpr"
 
     override def examples: List[String] =
       List("name,sps,:eq,:sum", "name,sps,:eq,:max,(,nf.cluster,),:by")

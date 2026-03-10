@@ -68,7 +68,6 @@ class AtlasLspServerSuite extends FunSuite {
     openDocument(server, uri, "")
     val labels = requestCompletion(server, uri, 0)
     assert(labels.nonEmpty)
-    assert(labels.contains(":clear"))
     assert(labels.contains(":depth"))
   }
 

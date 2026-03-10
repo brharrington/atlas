@@ -69,6 +69,20 @@ trait TypedWord extends Word {
   }
 
   /**
+    * Extract a single parameter value from the stack. Override to customize extraction
+    * behavior, e.g., to unwrap wrapper types before delegating to the DataType extractor.
+    *
+    * @param param
+    *     The parameter declaration.
+    * @param value
+    *     The raw value from the stack.
+    * @return the extracted value.
+    */
+  protected def extractParam(param: Parameter, value: Any): Any = {
+    param.dataType.extract(value).get
+  }
+
+  /**
     * Extracts typed parameters from the stack and delegates to
     * [[execute(context:Context,params:IndexedSeq[Any])*]]. The consumed items are removed
     * from the context stack before the call. After execution, [[transformResult]] is called
@@ -80,7 +94,7 @@ trait TypedWord extends Word {
     val extracted = new Array[Any](n)
     var i = 0
     while (i < n) {
-      extracted(i) = params(n - 1 - i).dataType.extract(context.stack(i)).get
+      extracted(i) = extractParam(params(n - 1 - i), context.stack(i))
       i += 1
     }
     val args = ArraySeq.unsafeWrapArray(extracted).reverse
@@ -105,8 +119,8 @@ trait TypedWord extends Word {
     *     The context returned by execute.
     */
   protected def transformResult(
-    rawStackValues: List[Any],
-    params: IndexedSeq[Any],
+    @scala.annotation.unused rawStackValues: List[Any],
+    @scala.annotation.unused params: IndexedSeq[Any],
     result: Context
   ): Context = result
 
