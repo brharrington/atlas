@@ -1,6 +1,8 @@
 # Atlas LSP
 
-Language Server Protocol implementation for the Atlas Stack Language.
+Language Server Protocol implementation for the Atlas Stack Language. Designed
+to be used by both editors and AI tools that need deterministic context about
+Atlas expressions and graph URIs.
 
 ## Usage
 
@@ -50,6 +52,15 @@ Currently supported capabilities:
 - [ ] Signature help — show expected stack types when typing a word
 - [ ] Go to definition — jump to variable definitions for `:set`/`:get`
 - [ ] Expression preview — show evaluated result or final stack
+
+### Expression Introspection (for AI tooling)
+- [ ] Stack state inspection — return intermediate stack state at each step of evaluation
+- [ ] Operator documentation — given an expression, return docs for each operator used
+- [ ] Glossary lookup — connect metrics used in an expression to glossary docs when available
+- [ ] Expression decomposition — break multi-expression queries into labeled constituent parts
+- [ ] URI ↔ expression conversion — round-trip between graph URI form and raw expression form
+- [ ] Structured validation — return errors with kind, expected/actual types, and fix suggestions
+- [ ] Batch operations — accept multiple expressions per request for validation/formatting
 
 ### Other
 - [ ] Glossary support
