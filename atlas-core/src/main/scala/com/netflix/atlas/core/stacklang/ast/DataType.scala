@@ -15,7 +15,11 @@
  */
 package com.netflix.atlas.core.stacklang.ast
 
+import java.time.Duration
+
 import scala.util.Try
+
+import com.netflix.atlas.core.util.Strings
 
 /**
   * Represents a type for a stack language parameter. Provides a name for display
@@ -90,6 +94,45 @@ object DataType {
     def extract(value: Any): Option[Any] = value match {
       case v: List[?] => Some(v)
       case _          => None
+    }
+  }
+
+  /** Matches values that can be coerced to Duration (strings or Duration instances). */
+  case object DurationType extends DataType {
+
+    def name: String = "Duration"
+    def extract(value: Any): Option[Any] = unapply(value)
+
+    def unapply(value: Any): Option[Duration] = value match {
+      case v: String   => Try(Strings.parseDuration(v)).toOption
+      case v: Duration => Some(v)
+      case _           => None
+    }
+  }
+
+  /** Matches List values where all elements are strings. */
+  case object StringListType extends DataType {
+
+    def name: String = "StringList"
+    def extract(value: Any): Option[Any] = unapply(value)
+
+    def unapply(value: Any): Option[List[String]] = value match {
+      case vs: List[?] if vs.forall(_.isInstanceOf[String]) => Some(vs.asInstanceOf[List[String]])
+      case _                                                => None
+    }
+  }
+
+  /** Matches List values where all elements can be coerced to Double. */
+  case object DoubleListType extends DataType {
+
+    def name: String = "DoubleList"
+    def extract(value: Any): Option[Any] = unapply(value)
+
+    def unapply(value: Any): Option[List[Double]] = value match {
+      case vs: List[?] =>
+        val doubles = vs.map(DoubleType.unapply)
+        if (doubles.forall(_.isDefined)) Some(doubles.map(_.get)) else None
+      case _ => None
     }
   }
 }

@@ -23,7 +23,8 @@ import com.netflix.atlas.core.stacklang.Word
 
 object DataVocabulary extends Vocabulary {
 
-  import com.netflix.atlas.core.model.ModelExtractors.*
+  import com.netflix.atlas.core.model.ModelDataTypes.*
+  import com.netflix.atlas.core.stacklang.ast.DataType.*
 
   val name: String = "data"
 
@@ -198,12 +199,12 @@ object DataVocabulary extends Vocabulary {
     override def name: String = "offset"
 
     protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case DurationType(_) :: TimeSeriesType(_) :: _   => true
-      case DurationType(_) :: PresentationType(_) :: _ => true
+      case DurationType(_) :: TimeSeriesExprType(_) :: _ => true
+      case DurationType(_) :: PresentationType(_) :: _   => true
     }
 
     protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case DurationType(d) :: TimeSeriesType(t) :: stack =>
+      case DurationType(d) :: TimeSeriesExprType(t) :: stack =>
         t.withOffset(d) :: stack
       case DurationType(d) :: PresentationType(t) :: stack =>
         t.copy(expr = t.expr.withOffset(d)) :: stack
@@ -226,11 +227,11 @@ object DataVocabulary extends Vocabulary {
     def cf: ConsolidationFunction
 
     protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case TimeSeriesType(_) :: _ => true
+      case TimeSeriesExprType(_) :: _ => true
     }
 
     protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case TimeSeriesType(t) :: stack =>
+      case TimeSeriesExprType(t) :: stack =>
         // Expand rewrites, custom consolidation cannot be preserved with the rewrite in
         // place. Expand so we can preserve correctness.
         val evalExpr = t.rewrite {

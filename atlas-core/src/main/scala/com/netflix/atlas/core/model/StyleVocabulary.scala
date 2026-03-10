@@ -26,7 +26,8 @@ import com.netflix.atlas.core.util.Strings
 
 object StyleVocabulary extends Vocabulary {
 
-  import com.netflix.atlas.core.model.ModelExtractors.*
+  import com.netflix.atlas.core.model.ModelDataTypes.*
+  import com.netflix.atlas.core.stacklang.ast.DataType.*
 
   val name: String = "style"
 
@@ -287,13 +288,13 @@ object StyleVocabulary extends Vocabulary {
     override def name: String = "filter"
 
     override def matches(stack: List[Any]): Boolean = stack match {
-      case TimeSeriesType(_) :: (_: StyleExpr) :: _ => true
-      case _                                        => false
+      case TimeSeriesExprType(_) :: (_: StyleExpr) :: _ => true
+      case _                                            => false
     }
 
     override def execute(context: Context): Context = {
       context.stack match {
-        case TimeSeriesType(ts) :: (se: StyleExpr) :: s =>
+        case TimeSeriesExprType(ts) :: (se: StyleExpr) :: s =>
           val rs = FilterVocabulary.Filter.execute(context.copy(stack = ts :: se.expr :: s))
           val newExpr = se.copy(expr = rs.stack.head.asInstanceOf[TimeSeriesExpr])
           rs.copy(stack = newExpr :: rs.stack.tail)

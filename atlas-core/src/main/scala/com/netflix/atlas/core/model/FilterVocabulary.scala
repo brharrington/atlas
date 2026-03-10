@@ -22,7 +22,7 @@ import com.netflix.atlas.core.stacklang.Word
 
 object FilterVocabulary extends Vocabulary {
 
-  import com.netflix.atlas.core.model.ModelExtractors.*
+  import com.netflix.atlas.core.model.ModelDataTypes.*
   import com.netflix.atlas.core.stacklang.ast.DataType.*
 
   val name: String = "filter"
@@ -61,12 +61,12 @@ object FilterVocabulary extends Vocabulary {
     override def name: String = "stat"
 
     protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case (_: String) :: TimeSeriesType(_) :: _ => true
-      case (_: String) :: (_: StyleExpr) :: _    => true
+      case (_: String) :: TimeSeriesExprType(_) :: _ => true
+      case (_: String) :: (_: StyleExpr) :: _        => true
     }
 
     protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case (s: String) :: TimeSeriesType(t) :: stack => FilterExpr.Stat(t, s) :: stack
+      case (s: String) :: TimeSeriesExprType(t) :: stack => FilterExpr.Stat(t, s) :: stack
       case (s: String) :: (t: StyleExpr) :: stack =>
         t.copy(expr = FilterExpr.Stat(t.expr, s)) :: stack
     }
@@ -211,11 +211,11 @@ object FilterVocabulary extends Vocabulary {
     override def name: String = "filter"
 
     protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case TimeSeriesType(_) :: TimeSeriesType(_) :: _ => true
+      case TimeSeriesExprType(_) :: TimeSeriesExprType(_) :: _ => true
     }
 
     protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case TimeSeriesType(t2) :: TimeSeriesType(t1) :: stack =>
+      case TimeSeriesExprType(t2) :: TimeSeriesExprType(t1) :: stack =>
         FilterExpr.Filter(t1, rewriteStatExprs(t1, t2)) :: stack
     }
 
@@ -242,12 +242,12 @@ object FilterVocabulary extends Vocabulary {
       extends SimpleWord {
 
     protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case IntType(_) :: (_: String) :: TimeSeriesType(_) :: _ => true
-      case IntType(_) :: (_: String) :: (_: StyleExpr) :: _    => true
+      case IntType(_) :: (_: String) :: TimeSeriesExprType(_) :: _ => true
+      case IntType(_) :: (_: String) :: (_: StyleExpr) :: _        => true
     }
 
     protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case IntType(k) :: (s: String) :: TimeSeriesType(t) :: stack =>
+      case IntType(k) :: (s: String) :: TimeSeriesExprType(t) :: stack =>
         op(t, s, k) :: stack
       case IntType(k) :: (s: String) :: (t: StyleExpr) :: stack =>
         t.copy(expr = op(t.expr, s, k)) :: stack
@@ -270,12 +270,12 @@ object FilterVocabulary extends Vocabulary {
     override def name: String = "consolidate"
 
     protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case DurationType(_) :: ConsolidationFunctionType(_) :: TimeSeriesType(_) :: _ => true
-      case DurationType(_) :: ConsolidationFunctionType(_) :: (_: StyleExpr) :: _    => true
+      case DurationType(_) :: ConsolidationFunctionType(_) :: TimeSeriesExprType(_) :: _ => true
+      case DurationType(_) :: ConsolidationFunctionType(_) :: (_: StyleExpr) :: _        => true
     }
 
     protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case DurationType(step) :: ConsolidationFunctionType(cf) :: TimeSeriesType(t) :: s =>
+      case DurationType(step) :: ConsolidationFunctionType(cf) :: TimeSeriesExprType(t) :: s =>
         FilterExpr.Consolidate(t, cf, step) :: s
       case DurationType(step) :: ConsolidationFunctionType(cf) :: (t: StyleExpr) :: s =>
         t.copy(expr = FilterExpr.Consolidate(t.expr, cf, step)) :: s

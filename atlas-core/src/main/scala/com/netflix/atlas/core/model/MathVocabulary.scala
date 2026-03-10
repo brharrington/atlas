@@ -17,19 +17,25 @@ package com.netflix.atlas.core.model
 
 import java.time.ZoneId
 import java.time.ZoneOffset
+
+import scala.collection.immutable.ArraySeq
+
 import com.netflix.atlas.core.model.DataExpr.AggregateFunction
 import com.netflix.atlas.core.model.MathExpr.AggrMathExpr
 import com.netflix.atlas.core.model.MathExpr.NamedRewrite
 import com.netflix.atlas.core.stacklang.Context
 import com.netflix.atlas.core.stacklang.SimpleWord
 import com.netflix.atlas.core.stacklang.StandardVocabulary.Macro
+import com.netflix.atlas.core.stacklang.TypedWord
 import com.netflix.atlas.core.stacklang.Vocabulary
 import com.netflix.atlas.core.stacklang.Word
+import com.netflix.atlas.core.stacklang.ast.DataType
+import com.netflix.atlas.core.stacklang.ast.Parameter
 import com.netflix.spectator.api.histogram.PercentileBuckets
 
 object MathVocabulary extends Vocabulary {
 
-  import com.netflix.atlas.core.model.ModelExtractors.*
+  import com.netflix.atlas.core.model.ModelDataTypes.*
   import com.netflix.atlas.core.stacklang.ast.DataType.*
 
   val name: String = "math"
@@ -241,27 +247,29 @@ object MathVocabulary extends Vocabulary {
     Macro("csc", List("1", ":swap", ":sin", ":div"))
   )
 
-  case object As extends SimpleWord {
+  case object As extends TypedWord {
 
     override def name: String = "as"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case (_: String) :: (_: String) :: TimeSeriesType(_) :: _ => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("", "input time series", TimeSeriesExprType),
+      Parameter("original", "original tag key name", DataType.StringType),
+      Parameter("replacement", "new tag key name", DataType.StringType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case (replacement: String) :: (original: String) :: TimeSeriesType(t) :: stack =>
-        MathExpr.As(t, original, replacement) :: stack
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val t = params(0).asInstanceOf[TimeSeriesExpr]
+      val original = params(1).asInstanceOf[String]
+      val replacement = params(2).asInstanceOf[String]
+      context.copy(stack = MathExpr.As(t, original, replacement) :: context.stack)
     }
 
     override def summary: String =
       """
         |Map a tag key name to an alternate name.
       """.stripMargin.trim
-
-    override def signature: String = {
-      "TimeSeriesExpr original:String replacement:String -- TimeSeriesExpr"
-    }
 
     override def examples: List[String] = List("name,sps,:eq,(,nf.cluster,),:by,nf.cluster,c")
   }
@@ -274,10 +282,10 @@ object MathVocabulary extends Vocabulary {
       case StringListType(_) :: (t: AggrMathExpr) :: _ if t.expr.isGrouped =>
         // Multi-level group by with an explicit aggregate specified
         true
-      case StringListType(_) :: TimeSeriesType(t) :: _ if t.isGrouped =>
+      case StringListType(_) :: TimeSeriesExprType(t) :: _ if t.isGrouped =>
         // Multi-level group by with an implicit aggregate of :sum
         true
-      case StringListType(_) :: TimeSeriesType(_) :: _ =>
+      case StringListType(_) :: TimeSeriesExprType(_) :: _ =>
         // Default data or math aggregate group by applied across math operations
         true
     }
@@ -286,10 +294,10 @@ object MathVocabulary extends Vocabulary {
       case StringListType(keys) :: (t: AggrMathExpr) :: stack if t.expr.isGrouped =>
         // Multi-level group by with an explicit aggregate specified
         MathExpr.GroupBy(t, keys) :: stack
-      case StringListType(keys) :: TimeSeriesType(t) :: stack if t.isGrouped =>
+      case StringListType(keys) :: TimeSeriesExprType(t) :: stack if t.isGrouped =>
         // Multi-level group by with an implicit aggregate of :sum
         MathExpr.GroupBy(MathExpr.Sum(t), keys) :: stack
-      case StringListType(keys) :: TimeSeriesType(t) :: stack =>
+      case StringListType(keys) :: TimeSeriesExprType(t) :: stack =>
         // Default data group by applied across math operations
         val f = t.rewrite {
           case nr: NamedRewrite                      => nr.groupBy(keys)
@@ -309,16 +317,19 @@ object MathVocabulary extends Vocabulary {
     override def examples: List[String] = List("name,sps,:eq,:avg,(,nf.cluster,)")
   }
 
-  case object Const extends SimpleWord {
+  case object Const extends TypedWord {
 
     override def name: String = "const"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case (_: String) :: _ => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("v", "constant value", DataType.DoubleType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case (v: String) :: stack => MathExpr.Constant(v.toDouble) :: stack
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val v = params(0).asInstanceOf[Double]
+      context.copy(stack = MathExpr.Constant(v) :: context.stack)
     }
 
     override def summary: String =
@@ -326,21 +337,19 @@ object MathVocabulary extends Vocabulary {
         |Generates a line where each datapoint is a constant value.
       """.stripMargin.trim
 
-    override def signature: String = "Double -- TimeSeriesExpr"
-
     override def examples: List[String] = List("42")
   }
 
-  case object Pi extends SimpleWord {
+  case object Pi extends TypedWord {
 
     override def name: String = "pi"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case _ => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq.empty
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case stack => MathExpr.Constant(Math.PI) :: stack
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      context.copy(stack = MathExpr.Constant(Math.PI) :: context.stack)
     }
 
     override def summary: String =
@@ -348,19 +357,19 @@ object MathVocabulary extends Vocabulary {
         |Generates a line where each datapoint has the value of the mathematical constant π.
       """.stripMargin.trim
 
-    override def signature: String = " -- TimeSeriesExpr"
-
     override def examples: List[String] = Nil
   }
 
-  case object Random extends SimpleWord {
+  case object Random extends TypedWord {
 
     override def name: String = "random"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = { case _ => true }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq.empty
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case s => MathExpr.Random :: s
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      context.copy(stack = MathExpr.Random :: context.stack)
     }
 
     override def summary: String =
@@ -371,21 +380,22 @@ object MathVocabulary extends Vocabulary {
         |value between 0.0 and 1.0.
       """.stripMargin.trim
 
-    override def signature: String = " -- TimeSeriesExpr"
-
     override def examples: List[String] = List("")
   }
 
-  case object SeededRandom extends SimpleWord {
+  case object SeededRandom extends TypedWord {
 
     override def name: String = "srandom"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case IntType(_) :: _ => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("seed", "seed for random number generator", DataType.IntType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case IntType(seed) :: s => MathExpr.SeededRandom(seed) :: s
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val seed = params(0).asInstanceOf[Int]
+      context.copy(stack = MathExpr.SeededRandom(seed) :: context.stack)
     }
 
     override def summary: String =
@@ -397,21 +407,22 @@ object MathVocabulary extends Vocabulary {
         |Each datapoint is a value between 0.0 and 1.0.
       """.stripMargin.trim
 
-    override def signature: String = "seed:Int -- TimeSeriesExpr"
-
     override def examples: List[String] = List("42")
   }
 
-  case object Time extends SimpleWord {
+  case object Time extends TypedWord {
 
     override def name: String = "time"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case (_: String) :: _ => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("mode", "time field to extract", DataType.StringType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case (v: String) :: stack => MathExpr.Time(v) :: stack
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val mode = params(0).asInstanceOf[String]
+      context.copy(stack = MathExpr.Time(mode) :: context.stack)
     }
 
     override def summary: String =
@@ -423,31 +434,29 @@ object MathVocabulary extends Vocabulary {
         |[ChronoField](https://docs.oracle.com/javase/8/docs/api/java/time/temporal/ChronoField.html).
       """.stripMargin.trim
 
-    override def signature: String = "String -- TimeSeriesExpr"
-
     override def examples: List[String] = List("hourOfDay", "HOUR_OF_DAY")
   }
 
-  case object TimeSpan extends Word {
+  case object TimeSpan extends TypedWord {
 
     override def name: String = "time-span"
 
-    def matches(stack: List[Any]): Boolean = stack match {
-      case (_: String) :: (_: String) :: _ => true
-      case _                               => false
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("s", "start time", DataType.StringType),
+      Parameter("e", "end time", DataType.StringType)
+    )
 
-    def execute(context: Context): Context = {
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val s = params(0).asInstanceOf[String]
+      val e = params(1).asInstanceOf[String]
       val zone = context.variables.get("tz") match {
         case Some(z: String) => ZoneId.of(z)
         case Some(z: ZoneId) => z
         case _               => ZoneOffset.UTC
       }
-      val newStack = context.stack match {
-        case (e: String) :: (s: String) :: stack => MathExpr.TimeSpan(s, e, zone) :: stack
-        case _                                   => invalidStack
-      }
-      context.copy(stack = newStack)
+      context.copy(stack = MathExpr.TimeSpan(s, e, zone) :: context.stack)
     }
 
     override def summary: String =
@@ -473,8 +482,6 @@ object MathVocabulary extends Vocabulary {
         |Since: 1.6
       """.stripMargin.trim
 
-    override def signature: String = "s:String e:String -- TimeSeriesExpr"
-
     override def examples: List[String] = List("e-30m,ge", "2014-02-20T13:00,s%2B30m")
   }
 
@@ -486,10 +493,10 @@ object MathVocabulary extends Vocabulary {
       case StringListType(_) :: (t: AggrMathExpr) :: _ if t.expr.isGrouped =>
         // Multi-level group by with an explicit aggregate specified
         true
-      case StringListType(_) :: TimeSeriesType(t) :: _ if t.isGrouped =>
+      case StringListType(_) :: TimeSeriesExprType(t) :: _ if t.isGrouped =>
         // Multi-level group by with an implicit aggregate of :sum
         true
-      case StringListType(_) :: TimeSeriesType(_) :: _ =>
+      case StringListType(_) :: TimeSeriesExprType(_) :: _ =>
         // Default data or math aggregate group by applied across math operations
         true
       case StringListType(_) :: PresentationType(_) :: _ =>
@@ -532,7 +539,7 @@ object MathVocabulary extends Vocabulary {
     }
 
     override protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case StringListType(keys) :: TimeSeriesType(t) :: stack =>
+      case StringListType(keys) :: TimeSeriesExprType(t) :: stack =>
         addCommonKeys(t, keys) :: stack
       case StringListType(keys) :: PresentationType(e) :: stack =>
         StyleExpr(addCommonKeys(e.expr, keys), e.settings) :: stack
@@ -569,9 +576,9 @@ object MathVocabulary extends Vocabulary {
     }
 
     protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case (_: String) :: TimeSeriesType(_) :: TimeSeriesType(_) :: _ => true
-      case (_: String) :: TimeSeriesType(_) :: (_: StyleExpr) :: _    => true
-      case (_: String) :: (_: StyleExpr) :: (_: StyleExpr) :: _       => true
+      case (_: String) :: TimeSeriesExprType(_) :: TimeSeriesExprType(_) :: _ => true
+      case (_: String) :: TimeSeriesExprType(_) :: (_: StyleExpr) :: _        => true
+      case (_: String) :: (_: StyleExpr) :: (_: StyleExpr) :: _               => true
     }
 
     protected def executor(context: Context): PartialFunction[List[Any], List[Any]] = {
@@ -580,16 +587,16 @@ object MathVocabulary extends Vocabulary {
         // on the rewrite and carry forward presentation.
         val nrw = MathExpr.NamedRewrite(n, orig.expr, Nil, rw.expr, context)
         orig.copy(expr = nrw) :: stack
-      case (n: String) :: TimeSeriesType(rw) :: (orig: StyleExpr) :: stack =>
+      case (n: String) :: TimeSeriesExprType(rw) :: (orig: StyleExpr) :: stack =>
         // If the original has presentation settings, apply the rewrite to the
         // underlying expression and carry forward the presentation.
         val nrw = MathExpr.NamedRewrite(n, orig.expr, Nil, rw, context)
         orig.copy(expr = nrw) :: stack
-      case (n: String) :: TimeSeriesType(rw) :: (orig: Expr) :: stack =>
+      case (n: String) :: TimeSeriesExprType(rw) :: (orig: Expr) :: stack =>
         // If the original is already an expr type, e.g. a Query, then we should
         // preserve it without modification. So we first match for Expr.
         MathExpr.NamedRewrite(n, orig, Nil, rw, context) :: stack
-      case (n: String) :: TimeSeriesType(rw) :: TimeSeriesType(orig) :: stack =>
+      case (n: String) :: TimeSeriesExprType(rw) :: TimeSeriesExprType(orig) :: stack =>
         // This is a more general match that will coerce the original into a
         // TimeSeriesExpr if it is not one already, e.g., a constant.
         MathExpr.NamedRewrite(n, orig, Nil, rw, context) :: stack
@@ -615,12 +622,12 @@ object MathVocabulary extends Vocabulary {
     override def name: String = "clamp-min"
 
     protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case DoubleType(_) :: TimeSeriesType(_) :: _ => true
-      case DoubleType(_) :: (_: StyleExpr) :: _    => true
+      case DoubleType(_) :: TimeSeriesExprType(_) :: _ => true
+      case DoubleType(_) :: (_: StyleExpr) :: _        => true
     }
 
     protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case DoubleType(mn) :: TimeSeriesType(t) :: stack => MathExpr.ClampMin(t, mn) :: stack
+      case DoubleType(mn) :: TimeSeriesExprType(t) :: stack => MathExpr.ClampMin(t, mn) :: stack
       case DoubleType(mn) :: (t: StyleExpr) :: stack =>
         t.copy(expr = MathExpr.ClampMin(t.expr, mn)) :: stack
     }
@@ -643,12 +650,12 @@ object MathVocabulary extends Vocabulary {
     override def name: String = "clamp-max"
 
     protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case DoubleType(_) :: TimeSeriesType(_) :: _ => true
-      case DoubleType(_) :: (_: StyleExpr) :: _    => true
+      case DoubleType(_) :: TimeSeriesExprType(_) :: _ => true
+      case DoubleType(_) :: (_: StyleExpr) :: _        => true
     }
 
     protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case DoubleType(mx) :: TimeSeriesType(t) :: stack => MathExpr.ClampMax(t, mx) :: stack
+      case DoubleType(mx) :: TimeSeriesExprType(t) :: stack => MathExpr.ClampMax(t, mx) :: stack
       case DoubleType(mx) :: (t: StyleExpr) :: stack =>
         t.copy(expr = MathExpr.ClampMax(t.expr, mx)) :: stack
     }
@@ -691,8 +698,8 @@ object MathVocabulary extends Vocabulary {
   sealed trait UnaryWord extends SimpleWord {
 
     protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case TimeSeriesType(_) :: _ => true
-      case (_: StyleExpr) :: _    => true
+      case TimeSeriesExprType(_) :: _ => true
+      case (_: StyleExpr) :: _        => true
     }
 
     def newInstance(t: TimeSeriesExpr): MathExpr.UnaryMathExpr
@@ -708,7 +715,7 @@ object MathVocabulary extends Vocabulary {
     }
 
     protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case TimeSeriesType(t) :: stack =>
+      case TimeSeriesExprType(t) :: stack =>
         execute(t, stack)
       case (t: StyleExpr) :: stack =>
         t.copy(expr = newInstance(t.expr)) :: stack
@@ -793,10 +800,10 @@ object MathVocabulary extends Vocabulary {
   sealed trait BinaryWord extends SimpleWord {
 
     protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case TimeSeriesType(_) :: TimeSeriesType(_) :: _ => true
-      case (_: StyleExpr) :: TimeSeriesType(_) :: _    => true
-      case TimeSeriesType(_) :: (_: StyleExpr) :: _    => true
-      case (_: StyleExpr) :: (_: StyleExpr) :: _       => true
+      case TimeSeriesExprType(_) :: TimeSeriesExprType(_) :: _ => true
+      case (_: StyleExpr) :: TimeSeriesExprType(_) :: _        => true
+      case TimeSeriesExprType(_) :: (_: StyleExpr) :: _        => true
+      case (_: StyleExpr) :: (_: StyleExpr) :: _               => true
     }
 
     def newInstance(t1: TimeSeriesExpr, t2: TimeSeriesExpr): MathExpr.BinaryMathExpr
@@ -812,11 +819,11 @@ object MathVocabulary extends Vocabulary {
     }
 
     protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case TimeSeriesType(t2) :: TimeSeriesType(t1) :: stack =>
+      case TimeSeriesExprType(t2) :: TimeSeriesExprType(t1) :: stack =>
         execute(t1, t2, stack)
-      case (t2: StyleExpr) :: TimeSeriesType(t1) :: stack =>
+      case (t2: StyleExpr) :: TimeSeriesExprType(t1) :: stack =>
         t2.copy(expr = newInstance(t1, t2.expr)) :: stack
-      case TimeSeriesType(t2) :: (t1: StyleExpr) :: stack =>
+      case TimeSeriesExprType(t2) :: (t1: StyleExpr) :: stack =>
         t1.copy(expr = newInstance(t1.expr, t2)) :: stack
       case (t2: StyleExpr) :: (t1: StyleExpr) :: stack =>
         // If both sides have presentation, strip the presentation settings to avoid
@@ -1257,16 +1264,17 @@ object MathVocabulary extends Vocabulary {
     * Compute the estimated number of samples within a range of the distribution for a
     * percentile approximation.
     */
-  case object SampleCount extends Word {
+  case object SampleCount extends TypedWord {
 
     override def name: String = "sample-count"
 
-    override def matches(stack: List[Any]): Boolean = {
-      stack match {
-        case DoubleType(_) :: DoubleType(_) :: (_: Query) :: _ => true
-        case _                                                 => false
-      }
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("q", "base query", QueryType),
+      Parameter("min", "minimum value of range", DataType.DoubleType),
+      Parameter("max", "maximum value of range", DataType.DoubleType)
+    )
+
+    override def outputs: IndexedSeq[DataType] = ArraySeq(TimeSeriesExprType)
 
     private def bucketLabel(prefix: String, v: Double): String = {
       val idx = PercentileBuckets.indexOf(v.toLong)
@@ -1291,19 +1299,15 @@ object MathVocabulary extends Vocabulary {
       distQuery.or(timerQuery)
     }
 
-    override def execute(context: Context): Context = {
-      context.stack match {
-        case DoubleType(max) :: DoubleType(min) :: (q: Query) :: stack =>
-          val rangeQuery = q.and(bucketQuery(min, max))
-          val expr = DataExpr.Sum(rangeQuery)
-          val nr = MathExpr.NamedRewrite(name, q, List(min, max), expr, context)
-          context.copy(stack = nr :: stack)
-        case _ =>
-          invalidStack
-      }
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val q = params(0).asInstanceOf[Query]
+      val min = params(1).asInstanceOf[Double]
+      val max = params(2).asInstanceOf[Double]
+      val rangeQuery = q.and(bucketQuery(min, max))
+      val expr = DataExpr.Sum(rangeQuery)
+      val nr = MathExpr.NamedRewrite(name, q, List(min, max), expr, context)
+      context.copy(stack = nr :: context.stack)
     }
-
-    override def signature: String = "Query Double Double -- DataExpr"
 
     override def summary: String =
       """

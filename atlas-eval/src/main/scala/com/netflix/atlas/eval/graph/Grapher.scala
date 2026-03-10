@@ -33,7 +33,7 @@ import com.netflix.atlas.core.db.Database
 import com.netflix.atlas.core.model.DataExpr
 import com.netflix.atlas.core.model.EvalContext
 import com.netflix.atlas.core.model.Expr
-import com.netflix.atlas.core.model.ModelExtractors
+import com.netflix.atlas.core.model.ModelDataTypes
 import com.netflix.atlas.core.model.Query
 import com.netflix.atlas.core.model.QueryVocabulary
 import com.netflix.atlas.core.model.ResultSet
@@ -165,7 +165,7 @@ case class Grapher(settings: DefaultSettings) {
         .reverse
         .map(cq)
         .flatMap {
-          case ModelExtractors.PresentationType(s) =>
+          case ModelDataTypes.PresentationType(s) =>
             s.perOffset
           case v =>
             val tpe = v.getClass.getSimpleName

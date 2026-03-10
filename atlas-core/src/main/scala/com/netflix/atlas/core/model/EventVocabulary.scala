@@ -29,7 +29,7 @@ object EventVocabulary extends Vocabulary {
 
   case object TableWord extends SimpleWord {
 
-    import ModelExtractors.*
+    import com.netflix.atlas.core.stacklang.ast.DataType.*
 
     override def name: String = "table"
 
@@ -53,7 +53,7 @@ object EventVocabulary extends Vocabulary {
 
   case object SampleWord extends SimpleWord {
 
-    import ModelExtractors.*
+    import com.netflix.atlas.core.stacklang.ast.DataType.*
 
     override def name: String = "sample"
 

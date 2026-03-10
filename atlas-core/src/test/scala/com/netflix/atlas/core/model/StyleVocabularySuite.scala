@@ -15,7 +15,7 @@
  */
 package com.netflix.atlas.core.model
 
-import com.netflix.atlas.core.model.ModelExtractors.PresentationType
+import com.netflix.atlas.core.model.ModelDataTypes.PresentationType
 import com.netflix.atlas.core.stacklang.Interpreter
 import munit.FunSuite
 

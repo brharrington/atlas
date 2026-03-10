@@ -23,7 +23,7 @@ import org.apache.pekko.http.scaladsl.server.Directives.*
 import org.apache.pekko.http.scaladsl.server.Route
 import com.netflix.atlas.core.model.Expr
 import com.netflix.atlas.core.model.FilterExpr
-import com.netflix.atlas.core.model.ModelExtractors
+import com.netflix.atlas.core.model.ModelDataTypes
 import com.netflix.atlas.core.model.Query
 import com.netflix.atlas.core.model.StyleExpr
 import com.netflix.atlas.core.model.TimeSeriesExpr
@@ -109,8 +109,8 @@ class ExprApi extends WebApi {
       case _ =>
         // Expecting a style expression that can be used in a graph
         val invalidItem = stack.find {
-          case ModelExtractors.PresentationType(_) => false
-          case _                                   => true
+          case ModelDataTypes.PresentationType(_) => false
+          case _                                  => true
         }
 
         invalidItem.foreach { item =>
@@ -195,7 +195,7 @@ class ExprApi extends WebApi {
     val result = interpreter.execute(expr, features = Features.UNSTABLE)
 
     val exprs = result.stack.collect {
-      case ModelExtractors.PresentationType(t) => t
+      case ModelDataTypes.PresentationType(t) => t
     }
     val queries = exprs
       .flatMap(_.expr.dataExprs.map(_.query))
@@ -217,7 +217,7 @@ class ExprApi extends WebApi {
     val result = interpreter.execute(expr)
 
     val exprs = result.stack.collect {
-      case ModelExtractors.PresentationType(t) =>
+      case ModelDataTypes.PresentationType(t) =>
         stripVocabulary(t.rewrite(stripKeys(keys)), vocabsToRemove.toList).toString
     }
 
@@ -340,7 +340,7 @@ object ExprApi {
 
   private def eval(interpreter: Interpreter, expr: String): List[StyleExpr] = {
     interpreter.execute(expr, features = Features.UNSTABLE).stack.collect {
-      case ModelExtractors.PresentationType(t) => t
+      case ModelDataTypes.PresentationType(t) => t
     }
   }
 
@@ -556,7 +556,7 @@ object ExprApi {
     val result = interpreter.execute(expr, features = Features.UNSTABLE)
 
     val exprs = result.stack.collect {
-      case ModelExtractors.PresentationType(t) => t
+      case ModelDataTypes.PresentationType(t) => t
     }
 
     exprs.zipWithIndex.map(t => rewriteOffset(t._1, t._2))
