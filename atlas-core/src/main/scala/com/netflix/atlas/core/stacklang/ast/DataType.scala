@@ -17,8 +17,6 @@ package com.netflix.atlas.core.stacklang.ast
 
 import scala.util.Try
 
-import com.netflix.atlas.core.model.MathExpr
-
 /**
   * Represents a type for a stack language parameter. Provides a name for display
   * and an extractor for type checking and coercion. Custom types can be created by
@@ -52,10 +50,10 @@ object DataType {
     def extract(value: Any): Option[Any] = unapply(value)
 
     def unapply(value: Any): Option[Int] = value match {
-      case v: String            => Try(v.toInt).toOption
-      case v: MathExpr.Constant => Some(v.v.toInt)
-      case v: Int               => Some(v)
-      case _                    => None
+      case v: String   => Try(v.toInt).toOption
+      case v: Number   => Some(v.intValue())
+      case v: IsNumber => Some(v.toNumber.intValue())
+      case _           => None
     }
   }
 
@@ -66,10 +64,10 @@ object DataType {
     def extract(value: Any): Option[Any] = unapply(value)
 
     def unapply(value: Any): Option[Double] = value match {
-      case v: String            => Try(v.toDouble).toOption
-      case v: MathExpr.Constant => Some(v.v)
-      case v: Double            => Some(v)
-      case _                    => None
+      case v: String   => Try(v.toDouble).toOption
+      case v: Number   => Some(v.doubleValue())
+      case v: IsNumber => Some(v.toNumber.doubleValue())
+      case _           => None
     }
   }
 

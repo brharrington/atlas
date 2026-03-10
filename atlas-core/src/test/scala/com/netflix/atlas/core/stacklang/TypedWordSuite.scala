@@ -18,6 +18,7 @@ package com.netflix.atlas.core.stacklang
 import scala.collection.immutable.ArraySeq
 
 import com.netflix.atlas.core.stacklang.ast.DataType
+import com.netflix.atlas.core.stacklang.ast.IsNumber
 import com.netflix.atlas.core.stacklang.ast.Parameter
 import munit.FunSuite
 
@@ -41,9 +42,22 @@ class TypedWordSuite extends FunSuite {
     assertEquals(DataType.IntType.extract("42"), Some(42))
   }
 
+  test("IntType: coerces Double to Int") {
+    assertEquals(DataType.IntType.extract(3.14), Some(3))
+  }
+
+  test("IntType: extracts Int from Number") {
+    val n: Number = java.lang.Long.valueOf(7L)
+    assertEquals(DataType.IntType.extract(n), Some(7))
+  }
+
+  test("IntType: extracts Int from IsNumber") {
+    val n = new IsNumber { def toNumber: Number = 42.0 }
+    assertEquals(DataType.IntType.extract(n), Some(42))
+  }
+
   test("IntType: returns None for non-Int") {
     assertEquals(DataType.IntType.extract("abc"), None)
-    assertEquals(DataType.IntType.extract(3.14), None)
   }
 
   test("DoubleType: extracts Double from Double") {
@@ -52,6 +66,16 @@ class TypedWordSuite extends FunSuite {
 
   test("DoubleType: extracts Double from String") {
     assertEquals(DataType.DoubleType.extract("3.14"), Some(3.14))
+  }
+
+  test("DoubleType: extracts Double from Number") {
+    val n: Number = java.lang.Long.valueOf(7L)
+    assertEquals(DataType.DoubleType.extract(n), Some(7.0))
+  }
+
+  test("DoubleType: extracts Double from IsNumber") {
+    val n = new IsNumber { def toNumber: Number = 3.14 }
+    assertEquals(DataType.DoubleType.extract(n), Some(3.14))
   }
 
   test("DoubleType: returns None for non-Double") {
