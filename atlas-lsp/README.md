@@ -35,7 +35,7 @@ Currently supported capabilities:
 ## TODO
 
 ### Code Actions
-- [ ] Improve format action
+- [ ] Improve format action — macros (`:stack`, `:area`, etc.) need TypedMacro with declared pop/push counts so the formatter can group them correctly with their arguments
 - [ ] Add compress action
 - [ ] Add normalize action
 - [ ] Add rewrite action

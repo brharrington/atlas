@@ -19,7 +19,6 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.jdk.CollectionConverters.*
 
-import com.netflix.atlas.core.util.Features
 import com.netflix.atlas.core.stacklang.Interpreter
 import com.netflix.atlas.core.stacklang.TypedWord
 import com.netflix.atlas.core.stacklang.ast.*
@@ -88,22 +87,164 @@ class AtlasDocumentAnalyzer(
   private[lsp] def computeCodeActions(uri: String): List[Either[Command, CodeAction]] = {
     val text = getText(uri)
     if (text.isEmpty) return Nil
-    try {
-      val context = interpreter.execute(text, features = Features.UNSTABLE)
-      val normalized = Interpreter.toString(context.stack)
-      if (normalized == text) Nil
-      else {
-        val range = new Range(new Position(0, 0), offsetToPosition(text, text.length))
-        val edit = new TextEdit(range, normalized)
-        val wsEdit = new WorkspaceEdit(java.util.Map.of(uri, java.util.List.of(edit)))
-        val action = new CodeAction("Format expression")
-        action.setKind(CodeActionKind.RefactorRewrite)
-        action.setEdit(wsEdit)
-        List(Either.forRight(action))
-      }
-    } catch {
-      case _: Exception => Nil
+    val tree = interpreter.syntaxTree(text)
+    val hasErrors = tree.diagnostics.exists(_.severity == Severity.Error)
+    if (hasErrors) return Nil
+    val formatted = formatExpression(text, tree.nodes)
+    if (formatted == text) Nil
+    else {
+      val range = new Range(new Position(0, 0), offsetToPosition(text, text.length))
+      val edit = new TextEdit(range, formatted)
+      val wsEdit = new WorkspaceEdit(java.util.Map.of(uri, java.util.List.of(edit)))
+      val action = new CodeAction("Format expression")
+      action.setKind(CodeActionKind.RefactorRewrite)
+      action.setEdit(wsEdit)
+      List(Either.forRight(action))
     }
+  }
+
+  // --- Expression formatter ---
+
+  /** Node in the formatting tree. */
+  private sealed trait FormatNode {
+
+    /** Number of stack slots this node occupies. */
+    def size: Int
+  }
+
+  /** A literal value, comment, or unresolved word. */
+  private case class SimpleNode(text: String) extends FormatNode {
+    def size: Int = 1
+  }
+
+  /** A command that consumed arguments from the stack. */
+  private case class CommandNode(args: List[FormatNode], text: String, size: Int)
+      extends FormatNode
+
+  /** A parenthesized list. */
+  private case class ParenNode(children: List[FormatNode]) extends FormatNode {
+    def size: Int = 1
+  }
+
+  /** Format an expression by building a tree and rendering with line breaks. */
+  private[lsp] def formatExpression(expr: String, nodes: List[SyntaxNode]): String = {
+    val tree = buildFormatTree(expr, nodes)
+    renderFormatTree(tree)
+  }
+
+  /** Extract the original text for a syntax node from the expression string. */
+  private def nodeText(expr: String, node: SyntaxNode): String = {
+    expr.substring(node.span.start, node.span.end)
+  }
+
+  /**
+    * Build a format tree from syntax nodes. Each command groups with its arguments
+    * based on pop/push counts from the resolved TypedWord.
+    */
+  private def buildFormatTree(
+    expr: String,
+    nodes: List[SyntaxNode]
+  ): List[FormatNode] = {
+    import scala.collection.mutable
+    val stack = mutable.ArrayBuffer[FormatNode]()
+
+    nodes.foreach {
+      case node: LiteralNode =>
+        stack += SimpleNode(nodeText(expr, node))
+
+      case node: CommentNode =>
+        stack += SimpleNode(nodeText(expr, node))
+
+      case node: ListNode =>
+        val children = buildFormatTree(expr, node.children)
+        stack += ParenNode(children)
+
+      case node: WordNode =>
+        val wordName = s":${node.word.map(_.name).getOrElse(node.token.value.stripPrefix(":"))}"
+        node.word match {
+          case Some(tw: TypedWord) =>
+            popAndPush(stack, tw.parameters.length, tw.outputs.length, wordName)
+          case Some(w) =>
+            // Non-TypedWord words with known stack effects.
+            // TODO: Replace with TypedMacro that declares pop/push counts.
+            w.name match {
+              case "list" =>
+                val args = stack.toList
+                stack.clear()
+                stack += CommandNode(args, wordName, 1)
+              case "each" | "map" =>
+                popAndPush(stack, 2, 1, wordName)
+              case _ =>
+                stack += SimpleNode(wordName)
+            }
+          case None =>
+            stack += SimpleNode(wordName)
+        }
+    }
+    stack.toList
+  }
+
+  /** Pop `popCount` stack slots and push a CommandNode with the given push count. */
+  private def popAndPush(
+    stack: scala.collection.mutable.ArrayBuffer[FormatNode],
+    popCount: Int,
+    pushCount: Int,
+    wordName: String
+  ): Unit = {
+    var remaining = popCount
+    val args = List.newBuilder[FormatNode]
+    while (remaining > 0 && stack.nonEmpty) {
+      val top = stack.remove(stack.size - 1)
+      remaining -= top.size
+      args += top
+    }
+    stack += CommandNode(args.result().reverse, wordName, pushCount)
+  }
+
+  /** Check if a format node contains nested commands (is "complex"). */
+  private def isComplex(node: FormatNode): Boolean = node match {
+    case _: CommandNode => true
+    case _              => false
+  }
+
+  /** Words where the preceding separator should stay inline (no newline before). */
+  private val inlineWords: Set[String] = Set(":and", ":or", ":not")
+
+  /** Render a format tree to a formatted string with line breaks. */
+  private def renderFormatTree(nodes: List[FormatNode]): String = {
+    nodes.map(n => renderNode(n, indent = false)).mkString(",\n\n")
+  }
+
+  /** Max line length before a list is broken across multiple lines. */
+  private val maxLineLength = 78
+
+  private def renderNode(node: FormatNode, indent: Boolean): String = node match {
+    case SimpleNode(text) => text
+    case ParenNode(children) =>
+      val rendered = children.map(n => renderNode(n, indent = false))
+      val inline = s"(,${rendered.mkString(",")},)"
+      if (inline.length <= maxLineLength) inline
+      else s"(\n  ${rendered.mkString(",\n  ")}\n)"
+    case CommandNode(args, text, _) =>
+      if (args.isEmpty) {
+        text
+      } else {
+        val allSimple = args.forall(!isComplex(_))
+        val indentChildren = indent || text == ":set"
+        val argSep =
+          if (text == ":list") ",\n\n"
+          else if (allSimple) ","
+          else if (indentChildren) ",\n  "
+          else ",\n"
+        val renderedArgs = args.map(a => renderNode(a, indentChildren))
+        val lastArgSimple = !isComplex(args.last) || inlineWords.contains(text)
+        val cmdSep =
+          if (text == ":list" && !allSimple) ",\n\n"
+          else if (lastArgSimple) ","
+          else if (indent) ",\n  "
+          else ",\n"
+        renderedArgs.mkString(argSep) + cmdSep + text
+      }
   }
 
   private[lsp] def computeCompletions(text: String, offset: Int): List[CompletionItem] = {

@@ -241,9 +241,29 @@ case class Interpreter(vocabulary: List[Word]) {
                       nodes += WordNode(token, matched, stackBefore, diag)
                     } catch {
                       case e: Exception =>
-                        val d = Diagnostic(token.span, e.getMessage, Severity.Error)
-                        diagnostics += d
-                        nodes += WordNode(token, None, stackBefore, Some(d))
+                        // Check if the word matches the stack — if so, this is a
+                        // runtime execution error (e.g. :each body fails) rather
+                        // than a type mismatch, so record the match and approximate
+                        // the stack effect instead of emitting a false diagnostic.
+                        val matched = ws.find(_.matches(currentStack))
+                        matched match {
+                          case Some(tw: TypedWord) =>
+                            val n = tw.parameters.length
+                            currentStack = currentStack.drop(n)
+                            tw.outputs.foreach { dt =>
+                              currentStack = s"<${tw.name}:${dt.name}>" :: currentStack
+                            }
+                            stack = currentStack
+                            nodes += WordNode(token, Some(tw), stackBefore, None)
+                          case Some(w) =>
+                            // Non-TypedWord that matches — record as matched,
+                            // leave the stack unchanged (conservative).
+                            nodes += WordNode(token, Some(w), stackBefore, None)
+                          case None =>
+                            val d = Diagnostic(token.span, e.getMessage, Severity.Error)
+                            diagnostics += d
+                            nodes += WordNode(token, None, stackBefore, Some(d))
+                        }
                     }
                 }
               case v =>

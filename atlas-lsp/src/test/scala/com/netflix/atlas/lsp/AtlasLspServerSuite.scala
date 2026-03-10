@@ -17,6 +17,7 @@ package com.netflix.atlas.lsp
 
 import scala.jdk.CollectionConverters.*
 
+import com.netflix.atlas.core.model.StyleVocabulary
 import com.netflix.atlas.core.stacklang.StandardVocabulary
 import org.eclipse.lsp4j.CodeActionContext
 import org.eclipse.lsp4j.CodeActionParams
@@ -256,33 +257,138 @@ class AtlasLspServerSuite extends FunSuite {
     assertNotEquals(result.getCapabilities.getCodeActionProvider, null)
   }
 
-  test("codeAction: format normalizes expression") {
+  test("codeAction: no action for simple expression") {
     val server = newServer
     val uri = "expr:ca1"
     openDocument(server, uri, "a,b,:swap")
-    val actions = requestCodeActions(server, uri)
-    assertEquals(actions.size(), 1)
-    val action = actions.get(0).asInstanceOf[org.eclipse.lsp4j.jsonrpc.messages.Either[?, ?]]
-    val codeAction = action.getRight.asInstanceOf[org.eclipse.lsp4j.CodeAction]
-    assertEquals(codeAction.getTitle, "Format expression")
-    val edits = codeAction.getEdit.getChanges.get(uri)
-    assertEquals(edits.size(), 1)
-    assertEquals(edits.get(0).getNewText, "b,a")
-  }
-
-  test("codeAction: no action when already normalized") {
-    val server = newServer
-    val uri = "expr:ca2"
-    openDocument(server, uri, "b,a")
     val actions = requestCodeActions(server, uri)
     assertEquals(actions.size(), 0)
   }
 
   test("codeAction: no action on invalid expression") {
     val server = newServer
-    val uri = "expr:ca3"
+    val uri = "expr:ca2"
     openDocument(server, uri, ":unknown")
     val actions = requestCodeActions(server, uri)
     assertEquals(actions.size(), 0)
+  }
+
+  //
+  // format expression (unit tests via analyzer)
+  //
+
+  private def format(text: String): String = {
+    val server = newServer
+    val tree = server.interpreter().syntaxTree(text)
+    server.analyzer().formatExpression(text, tree.nodes)
+  }
+
+  /** Format using the full model vocabulary (query, data, math, style words). */
+  private def formatModel(text: String): String = {
+    val server = new AtlasLspServer(StyleVocabulary)
+    val tree = server.interpreter().syntaxTree(text)
+    server.analyzer().formatExpression(text, tree.nodes)
+  }
+
+  test("format: simple expression unchanged") {
+    assertEquals(format("a,b,:swap"), "a,b,:swap")
+  }
+
+  test("format: single literal unchanged") {
+    assertEquals(format("hello"), "hello")
+  }
+
+  test("format: nested operations get line breaks") {
+    // :dup pops 1 pushes 2, :drop pops 1 pushes 0
+    // tree: CommandNode([CommandNode([Simple("a")], ":dup", 2)], ":drop", 0)
+    val input = "a,:dup,:drop"
+    val expected = "a,:dup,\n:drop"
+    assertEquals(format(input), expected)
+  }
+
+  test("format: multiple top-level items separated by blank line") {
+    assertEquals(format("a,b"), "a,\n\nb")
+  }
+
+  test("format: model query with aggregation") {
+    val input = "name,sps,:eq,:sum"
+    val expected = "name,sps,:eq,\n:sum"
+    assertEquals(formatModel(input), expected)
+  }
+
+  test("format: model group by with complex arg") {
+    val input = "name,sps,:eq,:sum,(,name,),:by"
+    val expected = "name,sps,:eq,\n:sum,\n(,name,),:by"
+    assertEquals(formatModel(input), expected)
+  }
+
+  test("format: model multiple stack items") {
+    val input = "name,sps,:eq,:sum,name,app,:eq,:sum"
+    val expected = "name,sps,:eq,\n:sum,\n\nname,app,:eq,\n:sum"
+    assertEquals(formatModel(input), expected)
+  }
+
+  test("format: model set indents value") {
+    val input = "v,name,sps,:eq,:sum,:set"
+    val result = formatModel(input)
+    assert(result.contains("\n  "), s"Expected indented content in: $result")
+  }
+
+  test("format: model nested operations") {
+    val input = "name,sps,:eq,:sum,(,name,),:by,4,:rolling-count,1,:gt,$name,:legend"
+    val result = formatModel(input)
+    assert(result.contains("\n"), s"Expected line breaks in: $result")
+  }
+
+  test("format: :list and :each grouped together") {
+    val input = "name,a,:eq,:sum,:list,(,key,(,b,),:in,:cq,),:each"
+    val result = formatModel(input)
+    // :list and :each body should not have blank lines between them
+    assert(!result.contains(":list,\n\n("), s"Unexpected blank line between :list and :each body in: $result")
+  }
+
+  test("format: short list stays inline") {
+    val input = "name,a,:eq,:sum,(,name,),:by"
+    val result = formatModel(input)
+    assert(result.contains("(,name,)"), s"Short list should be inline in: $result")
+  }
+
+  test("format: long list wraps to multiple lines") {
+    val input = "name,a,:eq,:sum,(,us-west-2,us-east-1,us-east-2,eu-west-1,ap-southeast-1,ap-northeast-1,ap-southeast-2,),:by"
+    val result = formatModel(input)
+    assert(result.contains("\n  us-west-2"), s"Long list should be multi-line in: $result")
+  }
+
+  test("format: :list args separated by blank lines") {
+    val input = "name,a,:eq,:sum,name,b,:eq,:sum,:list,(,key,(,c,),:in,:cq,),:each"
+    val result = formatModel(input)
+    // The two :sum expressions inside :list should be separated by blank lines
+    assert(result.contains(":sum,\n\n"), s"Expected blank line between :list args in: $result")
+    // :list and :each body should not have blank lines between them
+    assert(!result.contains(":list,\n\n("), s"Unexpected blank line between :list and :each body in: $result")
+  }
+
+  //
+  // diagnostics: words inside lists
+  //
+
+  /** Get diagnostics from the syntax tree for the given expression using the model vocabulary. */
+  private def modelDiagnostics(text: String): List[String] = {
+    val server = new AtlasLspServer(StyleVocabulary)
+    val tree = server.interpreter().syntaxTree(text)
+    tree.diagnostics.map(d => s"[${d.span.start}-${d.span.end}] ${d.message}")
+  }
+
+  test("diagnostics: :each with :in in list body no false errors") {
+    // When :each executes during syntax tree building, the list body may fail
+    // because it runs against aggregate types rather than individual items.
+    // The syntax tree should recognize the word matches and not emit a false
+    // diagnostic.
+    val input =
+      "v,name,a,:eq,:sum,:set," +
+      "v,:get,:list," +
+      "(,key,(,b,),:in,:cq,),:each"
+    val errors = modelDiagnostics(input).filter(_.contains("no matches"))
+    assertEquals(errors, Nil, s"Unexpected errors: ${errors.mkString("; ")}")
   }
 }
