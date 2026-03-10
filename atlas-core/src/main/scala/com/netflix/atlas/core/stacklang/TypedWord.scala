@@ -71,7 +71,8 @@ trait TypedWord extends Word {
   /**
     * Extracts typed parameters from the stack and delegates to
     * [[execute(context:Context,params:IndexedSeq[Any])*]]. The consumed items are removed
-    * from the context stack before the call.
+    * from the context stack before the call. After execution, [[transformResult]] is called
+    * to allow post-processing.
     */
   final override def execute(context: Context): Context = {
     val params = parameters
@@ -83,8 +84,31 @@ trait TypedWord extends Word {
       i += 1
     }
     val args = ArraySeq.unsafeWrapArray(extracted).reverse
-    execute(context.copy(stack = context.stack.drop(n)), args)
+    val remainingStack = context.stack.drop(n)
+    val result = execute(context.copy(stack = remainingStack), args)
+    transformResult(context.stack.take(n), args, result)
   }
+
+  /**
+    * Post-process the result of execution. Called after
+    * [[execute(context:Context,params:IndexedSeq[Any])*]] with the original raw stack
+    * values (top-of-stack first), the extracted parameters, and the result context.
+    * Override to implement cross-cutting concerns like style passthrough. Default
+    * implementation returns the result unchanged.
+    *
+    * @param rawStackValues
+    *     The original stack values consumed by this word, in stack order
+    *     (top-of-stack first).
+    * @param params
+    *     The extracted parameters in user-facing order (deepest first).
+    * @param result
+    *     The context returned by execute.
+    */
+  protected def transformResult(
+    rawStackValues: List[Any],
+    params: IndexedSeq[Any],
+    result: Context
+  ): Context = result
 
   /**
     * Execute the word with extracted parameters. The context stack has already had
