@@ -32,14 +32,14 @@ Currently supported capabilities:
 - **Hover** — word summary, stack signature, and examples on hover
 - **Go to definition** — jump from `:get` to corresponding `:set` definition
 - **Diagnostics** — error and warning reporting for invalid expressions
-- **Code actions** — expression formatting and compression via refactor/rewrite
+- **Code actions** — expression formatting, compression, and normalization via refactor/rewrite
 
 ## TODO
 
 ### Code Actions
 - [ ] Improve format action — macros (`:stack`, `:area`, etc.) need TypedMacro with declared pop/push counts so the formatter can group them correctly with their arguments
 - [x] Add compress action
-- [ ] Add normalize action
+- [x] Add normalize action
 - [ ] Add rewrite action
 
 ### Completions

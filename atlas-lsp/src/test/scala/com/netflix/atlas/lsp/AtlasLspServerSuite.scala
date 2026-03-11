@@ -19,8 +19,11 @@ import scala.jdk.CollectionConverters.*
 
 import com.netflix.atlas.core.model.StyleVocabulary
 import com.netflix.atlas.core.stacklang.StandardVocabulary
+import org.eclipse.lsp4j.CodeAction
 import org.eclipse.lsp4j.CodeActionContext
 import org.eclipse.lsp4j.CodeActionParams
+import org.eclipse.lsp4j.Command
+import org.eclipse.lsp4j.jsonrpc.messages.{Either => LspEither}
 import org.eclipse.lsp4j.CompletionParams
 import org.eclipse.lsp4j.DidOpenTextDocumentParams
 import org.eclipse.lsp4j.InitializeParams
@@ -273,6 +276,31 @@ class AtlasLspServerSuite extends FunSuite {
     assertEquals(actions.size(), 0)
   }
 
+  private def codeActionTitles(actions: java.util.List[?]): Seq[String] = {
+    (0 until actions.size()).map { i =>
+      val either = actions.get(i).asInstanceOf[LspEither[Command, CodeAction]]
+      either.getRight.getTitle
+    }
+  }
+
+  test("codeAction: normalize reorders query clauses") {
+    val server = new AtlasLspServer(StyleVocabulary)
+    val uri = "expr:ca-norm"
+    openDocument(server, uri, "nf.cluster,foo,:eq,name,bar,:eq,:and,:sum")
+    val actions = requestCodeActions(server, uri)
+    val titles = codeActionTitles(actions)
+    assert(titles.contains("Normalize expression"))
+  }
+
+  test("codeAction: normalize not offered when already normalized") {
+    val server = new AtlasLspServer(StyleVocabulary)
+    val uri = "expr:ca-norm2"
+    openDocument(server, uri, "name,sps,:eq,:sum")
+    val actions = requestCodeActions(server, uri)
+    val titles = codeActionTitles(actions)
+    assert(!titles.contains("Normalize expression"))
+  }
+
   //
   // hover
   //
@@ -469,7 +497,10 @@ class AtlasLspServerSuite extends FunSuite {
     val input = "name,a,:eq,:sum,:list,(,key,(,b,),:in,:cq,),:each"
     val result = formatModel(input)
     // :list and :each body should not have blank lines between them
-    assert(!result.contains(":list,\n\n("), s"Unexpected blank line between :list and :each body in: $result")
+    assert(
+      !result.contains(":list,\n\n("),
+      s"Unexpected blank line between :list and :each body in: $result"
+    )
   }
 
   test("format: short list stays inline") {
@@ -479,7 +510,8 @@ class AtlasLspServerSuite extends FunSuite {
   }
 
   test("format: long list wraps to multiple lines") {
-    val input = "name,a,:eq,:sum,(,us-west-2,us-east-1,us-east-2,eu-west-1,ap-southeast-1,ap-northeast-1,ap-southeast-2,),:by"
+    val input =
+      "name,a,:eq,:sum,(,us-west-2,us-east-1,us-east-2,eu-west-1,ap-southeast-1,ap-northeast-1,ap-southeast-2,),:by"
     val result = formatModel(input)
     assert(result.contains("\n  us-west-2"), s"Long list should be multi-line in: $result")
   }
@@ -490,7 +522,10 @@ class AtlasLspServerSuite extends FunSuite {
     // The two :sum expressions inside :list should be separated by blank lines
     assert(result.contains(":sum,\n\n"), s"Expected blank line between :list args in: $result")
     // :list and :each body should not have blank lines between them
-    assert(!result.contains(":list,\n\n("), s"Unexpected blank line between :list and :each body in: $result")
+    assert(
+      !result.contains(":list,\n\n("),
+      s"Unexpected blank line between :list and :each body in: $result"
+    )
   }
 
   //
@@ -511,8 +546,8 @@ class AtlasLspServerSuite extends FunSuite {
     // diagnostic.
     val input =
       "v,name,a,:eq,:sum,:set," +
-      "v,:get,:list," +
-      "(,key,(,b,),:in,:cq,),:each"
+        "v,:get,:list," +
+        "(,key,(,b,),:in,:cq,),:each"
     val errors = modelDiagnostics(input).filter(_.contains("no matches"))
     assertEquals(errors, Nil, s"Unexpected errors: ${errors.mkString("; ")}")
   }

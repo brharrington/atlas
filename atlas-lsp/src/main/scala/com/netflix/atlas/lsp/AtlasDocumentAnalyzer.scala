@@ -19,6 +19,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.jdk.CollectionConverters.*
 
+import com.netflix.atlas.core.model.ExprNormalizer
+import com.netflix.atlas.core.model.ModelDataTypes
 import com.netflix.atlas.core.stacklang.Interpreter
 import com.netflix.atlas.core.stacklang.TypedWord
 import com.netflix.atlas.core.stacklang.ast.*
@@ -50,6 +52,10 @@ class AtlasDocumentAnalyzer(
   val interpreter: Interpreter,
   clientSupplier: () => LanguageClient = () => null
 ) {
+
+  private val normalizer = new ExprNormalizer(
+    com.typesafe.config.ConfigFactory.load().getConfig("atlas.core.normalize")
+  )
 
   private[lsp] val documents = new ConcurrentHashMap[String, String]
 
@@ -118,6 +124,25 @@ class AtlasDocumentAnalyzer(
       actions += Either.forRight(action)
     }
 
+    try {
+      val exprs = interpreter.execute(text).stack.collect {
+        case ModelDataTypes.PresentationType(t) => t
+      }
+      if (exprs.nonEmpty) {
+        val normalized = exprs.map(normalizer.normalizeToString).reverse.mkString(",")
+        if (normalized != text) {
+          val edit = new TextEdit(range, normalized)
+          val wsEdit = new WorkspaceEdit(java.util.Map.of(uri, java.util.List.of(edit)))
+          val action = new CodeAction("Normalize expression")
+          action.setKind(CodeActionKind.RefactorRewrite)
+          action.setEdit(wsEdit)
+          actions += Either.forRight(action)
+        }
+      }
+    } catch {
+      case _: Exception => // Skip normalize action if execution fails
+    }
+
     actions.result()
   }
 
@@ -166,8 +191,7 @@ class AtlasDocumentAnalyzer(
   }
 
   /** A command that consumed arguments from the stack. */
-  private case class CommandNode(args: List[FormatNode], text: String, size: Int)
-      extends FormatNode
+  private case class CommandNode(args: List[FormatNode], text: String, size: Int) extends FormatNode
 
   /** A parenthesized list. */
   private case class ParenNode(children: List[FormatNode]) extends FormatNode {
@@ -363,7 +387,7 @@ class AtlasDocumentAnalyzer(
         // Cursor on literal — check if next node is :get
         flat(idx + 1) match {
           case WordNode(_, Some(w), _, _) if w.name == "get" => Some(token.value)
-          case _ => None
+          case _                                             => None
         }
       case _ => None
     }
@@ -392,12 +416,10 @@ class AtlasDocumentAnalyzer(
     name: String,
     beforeOffset: Int
   ): Option[Span] = {
-    flattenNodes(nodes)
-      .collect {
-        case w: WordNode if w.span.end <= beforeOffset && setVarName(w).contains(name) =>
-          w.span
-      }
-      .lastOption
+    flattenNodes(nodes).collect {
+      case w: WordNode if w.span.end <= beforeOffset && setVarName(w).contains(name) =>
+        w.span
+    }.lastOption
   }
 
   private[lsp] def computeCompletions(text: String, offset: Int): List[CompletionItem] = {
