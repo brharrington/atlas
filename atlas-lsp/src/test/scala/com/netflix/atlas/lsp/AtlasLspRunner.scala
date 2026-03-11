@@ -22,8 +22,6 @@ import java.io.PipedInputStream
 import java.io.PipedOutputStream
 import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets
-import com.sun.net.httpserver.HttpExchange
-import com.sun.net.httpserver.HttpServer
 import com.typesafe.config.ConfigFactory
 import org.eclipse.lsp4j.launch.LSPLauncher
 import org.java_websocket.WebSocket
@@ -33,66 +31,32 @@ import org.java_websocket.server.WebSocketServer
 /**
   * Test server for experimenting with Atlas LSP features in a browser.
   *
-  * Runs two servers:
-  *  - HTTP on port 7101: serves the test HTML page
-  *  - WebSocket on port 7102: speaks standard LSP JSON-RPC
+  * Runs a WebSocket server on port 7102 that speaks standard LSP JSON-RPC.
+  * Use with the test client in atlas-lsp/test-client/:
   *
-  * Run with: `project/sbt 'atlas-lsp/test:runMain com.netflix.atlas.lsp.AtlasLspRunner'`
-  * Then open http://localhost:7101
+  *   1. Start this server:
+  *      project/sbt 'atlas-lsp/test:runMain com.netflix.atlas.lsp.AtlasLspRunner'
+  *
+  *   2. In another terminal, start the test client:
+  *      cd atlas-lsp/test-client && npm install && npm run dev
+  *
+  *   3. Open the URL printed by Vite (typically http://localhost:5173)
   */
 object AtlasLspRunner {
 
   def main(args: Array[String]): Unit = {
-    val httpPort = 7101
     val wsPort = 7102
-
-    // HTTP server for serving the test page
-    val httpServer = HttpServer.create(new InetSocketAddress(httpPort), 0)
-    httpServer.createContext(
-      "/",
-      exchange => {
-        if (exchange.getRequestMethod == "GET") serveHtml(exchange)
-        else methodNotAllowed(exchange)
-      }
-    )
-    httpServer.setExecutor(null)
-    httpServer.start()
 
     // WebSocket server for LSP JSON-RPC
     val wsServer = new LspWebSocketServer(new InetSocketAddress(wsPort))
     wsServer.start()
 
-    println(s"Atlas LSP test page:   http://localhost:$httpPort")
     println(s"Atlas LSP WebSocket:   ws://localhost:$wsPort")
+    println()
+    println("Start the test client in another terminal:")
+    println("  cd atlas-lsp/test-client && npm install && npm run dev")
+    println()
     println("Press Ctrl+C to stop")
-  }
-
-  private def serveHtml(exchange: HttpExchange): Unit = {
-    val stream = getClass.getResourceAsStream("/lsp-test.html")
-    val html = if (stream != null) {
-      new String(stream.readAllBytes())
-    } else {
-      "<html><body>lsp-test.html not found on classpath</body></html>"
-    }
-    sendResponse(exchange, 200, "text/html", html)
-  }
-
-  private def sendResponse(
-    exchange: HttpExchange,
-    code: Int,
-    contentType: String,
-    body: String
-  ): Unit = {
-    val bytes = body.getBytes("UTF-8")
-    exchange.getResponseHeaders.add("Content-Type", s"$contentType; charset=utf-8")
-    exchange.sendResponseHeaders(code, bytes.length)
-    val out = exchange.getResponseBody
-    out.write(bytes)
-    out.close()
-  }
-
-  private def methodNotAllowed(exchange: HttpExchange): Unit = {
-    sendResponse(exchange, 405, "text/plain", "Method Not Allowed")
   }
 
   /**

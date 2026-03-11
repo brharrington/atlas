@@ -6,17 +6,35 @@ Atlas expressions and graph URIs.
 
 ## Usage
 
-### Test Page
+### Test Client
 
-Run the built-in test server to experiment with LSP features in a browser:
+A browser-based editor for testing the LSP server lives in [test-client/](test-client/).
+It uses [Monaco Editor](https://microsoft.github.io/monaco-editor/) 0.55+ with its
+built-in LSP client — no custom protocol handling required.
 
+1. Start the LSP server:
+
+   ```
+   project/sbt 'atlas-lsp/test:runMain com.netflix.atlas.lsp.AtlasLspRunner'
+   ```
+
+2. In another terminal, start the test client:
+
+   ```
+   cd atlas-lsp/test-client
+   npm install
+   npm run dev
+   ```
+
+3. Open the URL printed by Vite (typically http://localhost:5173).
+
+The connection uses Monaco's built-in LSP client:
+
+```js
+const ws = new WebSocket('ws://localhost:7102');
+const transport = monaco.lsp.WebSocketTransport.fromWebSocket(ws);
+new monaco.lsp.MonacoLspClient(transport);
 ```
-project/sbt 'atlas-lsp/test:runMain com.netflix.atlas.lsp.AtlasLspRunner'
-```
-
-Then open http://localhost:7101. The test page provides a Monaco editor connected to
-the LSP server over WebSocket with panels showing diagnostics, completions, cursor
-token info, and an LSP message log.
 
 ### Editor Integration
 
@@ -29,7 +47,7 @@ The LSP server communicates over standard JSON-RPC. To use with an editor:
 Currently supported capabilities:
 - **Completions** — context-aware word suggestions filtered by stack state
 - **Semantic tokens** — syntax highlighting for words, strings, numbers, parentheses, and comments
-- **Hover** — word summary, stack signature, and examples on hover
+- **Hover** — word summary, stack signature, examples, and stack state introspection on hover
 - **Go to definition** — jump from `:get` to corresponding `:set` definition
 - **Diagnostics** — error and warning reporting for invalid expressions
 - **Code actions** — expression formatting, compression, and normalization via refactor/rewrite
@@ -53,7 +71,7 @@ Currently supported capabilities:
 - [x] Go to definition — jump to variable definitions for `:set`/`:get`
 
 ### Expression Introspection (for AI tooling)
-- [ ] Stack state inspection — return intermediate stack state at each step of evaluation
+- [x] Stack state inspection — hover shows consumed/produced stack items for each word
 - [ ] Operator documentation — given an expression, return docs for each operator used
 - [ ] Glossary lookup — connect metrics used in an expression to glossary docs when available
 - [ ] Expression decomposition — break multi-expression queries into labeled constituent parts

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Atlas Stack Language Editor</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    header {
+      padding: 8px 16px;
+      background: #2d2d2d;
+      border-bottom: 1px solid #404040;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 14px; font-weight: 500; color: #ccc; }
+    .status { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .dot.connected { background: #4ec96b; }
+    .dot.disconnected { background: #f44747; }
+    #editor { flex: 1; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Atlas Stack Language</h1>
+    <div class="status">
+      <span class="dot disconnected" id="status-dot"></span>
+      <span id="status-text">LSP: connecting...</span>
+    </div>
+  </header>
+  <div id="editor"></div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
