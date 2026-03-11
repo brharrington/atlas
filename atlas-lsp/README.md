@@ -30,6 +30,7 @@ Currently supported capabilities:
 - **Completions** — context-aware word suggestions filtered by stack state
 - **Semantic tokens** — syntax highlighting for words, strings, numbers, parentheses, and comments
 - **Hover** — word summary, stack signature, and examples on hover
+- **Go to definition** — jump from `:get` to corresponding `:set` definition
 - **Diagnostics** — error and warning reporting for invalid expressions
 - **Code actions** — expression formatting and compression via refactor/rewrite
 
@@ -49,7 +50,7 @@ Currently supported capabilities:
 
 ### Editor Features
 - [x] Hover documentation — show word summary and stack signature on hover
-- [ ] Go to definition — jump to variable definitions for `:set`/`:get`
+- [x] Go to definition — jump to variable definitions for `:set`/`:get`
 - [ ] Expression preview — show evaluated result or final stack
 
 ### Expression Introspection (for AI tooling)

@@ -307,6 +307,64 @@ class AtlasLspServerSuite extends FunSuite {
   }
 
   //
+  // go to definition
+  //
+
+  private def requestDefinition(text: String, offset: Int): Option[org.eclipse.lsp4j.Location] = {
+    val server = newServer
+    server.analyzer().computeDefinition("test:uri", text, offset)
+  }
+
+  test("initialize enables definition") {
+    val server = newServer
+    val result = server.initialize(new InitializeParams).get()
+    assertNotEquals(result.getCapabilities.getDefinitionProvider, null)
+  }
+
+  test("definition: :get jumps to :set") {
+    // v,hello,:set,v,:get
+    // 0123456789012345678
+    val text = "v,hello,:set,v,:get"
+    val defn = requestDefinition(text, 15) // cursor on :get
+    assert(defn.isDefined)
+    // :set span
+    assertEquals(defn.get.getRange.getStart.getCharacter, 8)
+    assertEquals(defn.get.getRange.getEnd.getCharacter, 12)
+  }
+
+  test("definition: variable name before :get jumps to :set") {
+    val text = "v,hello,:set,v,:get"
+    val defn = requestDefinition(text, 13) // cursor on "v" before :get
+    assert(defn.isDefined)
+    assertEquals(defn.get.getRange.getStart.getCharacter, 8)
+  }
+
+  test("definition: jumps to most recent :set") {
+    // a,1,:set,a,2,:set,a,:get
+    // 0123456789012345678901234
+    val text = "a,1,:set,a,2,:set,a,:get"
+    val defn = requestDefinition(text, 20) // cursor on :get
+    assert(defn.isDefined)
+    // Should jump to second :set at position 13, not first at position 4
+    assertEquals(defn.get.getRange.getStart.getCharacter, 13)
+  }
+
+  test("definition: :sset support") {
+    // 3,a,:sset,a,:get
+    // 0123456789012345
+    val text = "3,a,:sset,a,:get"
+    val defn = requestDefinition(text, 12) // cursor on :get
+    assert(defn.isDefined)
+    assertEquals(defn.get.getRange.getStart.getCharacter, 4)
+  }
+
+  test("definition: no definition for literal without :get") {
+    val text = "a,b,:swap"
+    val defn = requestDefinition(text, 0) // cursor on "a"
+    assert(defn.isEmpty)
+  }
+
+  //
   // compress expression
   //
 

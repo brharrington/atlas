@@ -80,6 +80,7 @@ public class AtlasLspServer implements LanguageServer, LanguageClientAware {
         var codeActionOptions = new CodeActionOptions(List.of(CodeActionKind.RefactorRewrite));
         capabilities.setCodeActionProvider(codeActionOptions);
         capabilities.setHoverProvider(true);
+        capabilities.setDefinitionProvider(true);
         return CompletableFuture.completedFuture(new InitializeResult(capabilities));
     }
 

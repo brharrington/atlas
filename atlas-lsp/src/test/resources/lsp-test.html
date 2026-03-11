@@ -437,6 +437,31 @@
         }
       }
 
+      // --- Go to Definition ---
+
+      monaco.languages.registerDefinitionProvider('atlas', {
+        provideDefinition: async function (model, position) {
+          if (!initialized) return null;
+          try {
+            var result = await sendRequest('textDocument/definition', {
+              textDocument: { uri: DOC_URI },
+              position: { line: position.lineNumber - 1, character: position.column - 1 }
+            });
+            if (!result || result.length === 0) return null;
+            var loc = result[0];
+            return {
+              uri: model.uri,
+              range: new monaco.Range(
+                loc.range.start.line + 1, loc.range.start.character + 1,
+                loc.range.end.line + 1, loc.range.end.character + 1
+              )
+            };
+          } catch (e) {
+            return null;
+          }
+        }
+      });
+
       // --- Hover ---
 
       monaco.languages.registerHoverProvider('atlas', {

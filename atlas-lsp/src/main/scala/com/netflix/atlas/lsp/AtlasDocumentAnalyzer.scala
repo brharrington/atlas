@@ -30,6 +30,7 @@ import org.eclipse.lsp4j.CompletionItem
 import org.eclipse.lsp4j.CompletionItemKind
 import org.eclipse.lsp4j.DiagnosticSeverity
 import org.eclipse.lsp4j.Hover
+import org.eclipse.lsp4j.Location
 import org.eclipse.lsp4j.MarkupContent
 import org.eclipse.lsp4j.MarkupKind
 import org.eclipse.lsp4j.Position
@@ -329,6 +330,74 @@ class AtlasDocumentAnalyzer(
           case _ => node
         }
     }
+  }
+
+  private[lsp] def computeDefinition(
+    uri: String,
+    text: String,
+    offset: Int
+  ): Option[Location] = {
+    val tree = interpreter.syntaxTree(text)
+    getVarNameAtCursor(tree.nodes, offset).flatMap { name =>
+      findSetDefinition(tree.nodes, name, offset).map { span =>
+        val range = new Range(offsetToPosition(text, span.start), offsetToPosition(text, span.end))
+        new Location(uri, range)
+      }
+    }
+  }
+
+  /** Find the variable name at the cursor for :get references. */
+  private def getVarNameAtCursor(
+    nodes: List[SyntaxNode],
+    offset: Int
+  ): Option[String] = {
+    val flat = flattenNodes(nodes)
+    val idx = flat.indexWhere(n => n.span.start <= offset && offset <= n.span.end)
+    if (idx < 0) return None
+
+    flat(idx) match {
+      case WordNode(_, Some(w), stack, _) if w.name == "get" =>
+        // Cursor on :get — key name is top of pre-execution stack
+        stack.headOption.collect { case s: String => s }
+      case LiteralNode(token) if idx + 1 < flat.size =>
+        // Cursor on literal — check if next node is :get
+        flat(idx + 1) match {
+          case WordNode(_, Some(w), _, _) if w.name == "get" => Some(token.value)
+          case _ => None
+        }
+      case _ => None
+    }
+  }
+
+  /** Flatten a syntax tree into a linear sequence of leaf nodes. */
+  private def flattenNodes(nodes: List[SyntaxNode]): List[SyntaxNode] = {
+    nodes.flatMap {
+      case n: ListNode => flattenNodes(n.children)
+      case n           => List(n)
+    }
+  }
+
+  /** Extract the variable name being defined by a :set or :sset word. */
+  private def setVarName(w: WordNode): Option[String] = w.word.flatMap { word =>
+    word.name match {
+      case "set"  => w.stack.lift(1).collect { case s: String => s }
+      case "sset" => w.stack.headOption.collect { case s: String => s }
+      case _      => None
+    }
+  }
+
+  /** Find the most recent :set/:sset definition before the given offset. */
+  private def findSetDefinition(
+    nodes: List[SyntaxNode],
+    name: String,
+    beforeOffset: Int
+  ): Option[Span] = {
+    flattenNodes(nodes)
+      .collect {
+        case w: WordNode if w.span.end <= beforeOffset && setVarName(w).contains(name) =>
+          w.span
+      }
+      .lastOption
   }
 
   private[lsp] def computeCompletions(text: String, offset: Int): List[CompletionItem] = {
