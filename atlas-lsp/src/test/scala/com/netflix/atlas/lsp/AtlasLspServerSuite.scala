@@ -274,6 +274,39 @@ class AtlasLspServerSuite extends FunSuite {
   }
 
   //
+  // hover
+  //
+
+  private def requestHover(text: String, offset: Int): Option[org.eclipse.lsp4j.Hover] = {
+    val server = newServer
+    server.analyzer().computeHover(text, offset)
+  }
+
+  test("initialize enables hover") {
+    val server = newServer
+    val result = server.initialize(new InitializeParams).get()
+    assertNotEquals(result.getCapabilities.getHoverProvider, null)
+  }
+
+  test("hover: word shows signature and summary") {
+    val hover = requestHover("a,b,:swap", 5)
+    assert(hover.isDefined)
+    val content = hover.get.getContents.getRight.getValue
+    assert(content.contains(":swap"), s"Expected word name in: $content")
+    assert(content.contains("Swap"), s"Expected summary in: $content")
+  }
+
+  test("hover: literal returns None") {
+    val hover = requestHover("a,b,:swap", 0)
+    assert(hover.isEmpty)
+  }
+
+  test("hover: unknown word returns None") {
+    val hover = requestHover(":unknown", 0)
+    assert(hover.isEmpty)
+  }
+
+  //
   // compress expression
   //
 

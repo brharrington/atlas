@@ -27,6 +27,8 @@ import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
+import org.eclipse.lsp4j.Hover;
+import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.SemanticTokens;
 import org.eclipse.lsp4j.SemanticTokensParams;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
@@ -95,6 +97,16 @@ public class AtlasTextDocumentService implements TextDocumentService {
         var actions = analyzer.computeCodeActions(uri);
         var javaActions = CollectionConverters.asJava(actions);
         return CompletableFuture.completedFuture(new java.util.ArrayList<>(javaActions));
+    }
+
+    @Override
+    public CompletableFuture<Hover> hover(HoverParams params) {
+        var uri = params.getTextDocument().getUri();
+        var text = analyzer.getText(uri);
+        var pos = params.getPosition();
+        var offset = positionToOffset(text, pos.getLine(), pos.getCharacter());
+        var hover = analyzer.computeHover(text, offset);
+        return CompletableFuture.completedFuture(hover.getOrElse(() -> null));
     }
 
     @Override

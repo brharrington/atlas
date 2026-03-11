@@ -79,6 +79,7 @@ public class AtlasLspServer implements LanguageServer, LanguageClientAware {
         capabilities.setSemanticTokensProvider(semanticTokensOptions);
         var codeActionOptions = new CodeActionOptions(List.of(CodeActionKind.RefactorRewrite));
         capabilities.setCodeActionProvider(codeActionOptions);
+        capabilities.setHoverProvider(true);
         return CompletableFuture.completedFuture(new InitializeResult(capabilities));
     }
 

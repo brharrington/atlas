@@ -22,12 +22,16 @@ import scala.jdk.CollectionConverters.*
 import com.netflix.atlas.core.stacklang.Interpreter
 import com.netflix.atlas.core.stacklang.TypedWord
 import com.netflix.atlas.core.stacklang.ast.*
+import com.netflix.atlas.core.stacklang.Word
 import org.eclipse.lsp4j.CodeAction
 import org.eclipse.lsp4j.CodeActionKind
 import org.eclipse.lsp4j.Command
 import org.eclipse.lsp4j.CompletionItem
 import org.eclipse.lsp4j.CompletionItemKind
 import org.eclipse.lsp4j.DiagnosticSeverity
+import org.eclipse.lsp4j.Hover
+import org.eclipse.lsp4j.MarkupContent
+import org.eclipse.lsp4j.MarkupKind
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.PublishDiagnosticsParams
 import org.eclipse.lsp4j.Range
@@ -288,6 +292,43 @@ class AtlasDocumentAnalyzer(
           else ",\n"
         renderedArgs.mkString(argSep) + cmdSep + text
       }
+  }
+
+  private[lsp] def computeHover(text: String, offset: Int): Option[Hover] = {
+    val tree = interpreter.syntaxTree(text)
+    findNodeAt(tree.nodes, offset).flatMap {
+      case WordNode(_, Some(word), _, _) =>
+        Some(wordHover(word, text, offset))
+      case _ => None
+    }
+  }
+
+  private def wordHover(word: Word, text: String, offset: Int): Hover = {
+    val sb = new StringBuilder
+    sb.append(s"**:${word.name}**\n\n")
+    sb.append(s"`${word.signature}`\n\n")
+    sb.append(word.summary)
+    if (word.examples.nonEmpty) {
+      sb.append("\n\n**Examples:**\n")
+      word.examples.foreach { ex =>
+        sb.append(s"\n- `$ex`")
+      }
+    }
+    val content = new MarkupContent(MarkupKind.MARKDOWN, sb.toString)
+    val range = new Range(offsetToPosition(text, offset), offsetToPosition(text, offset))
+    new Hover(content, range)
+  }
+
+  /** Find the deepest syntax node whose span contains the given offset. */
+  private def findNodeAt(nodes: List[SyntaxNode], offset: Int): Option[SyntaxNode] = {
+    nodes.reverseIterator.collectFirst {
+      case node if node.span.start <= offset && offset <= node.span.end =>
+        node match {
+          case ListNode(_, children, _, _) =>
+            findNodeAt(children, offset).getOrElse(node)
+          case _ => node
+        }
+    }
   }
 
   private[lsp] def computeCompletions(text: String, offset: Int): List[CompletionItem] = {

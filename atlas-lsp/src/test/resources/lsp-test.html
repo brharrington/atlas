@@ -437,6 +437,27 @@
         }
       }
 
+      // --- Hover ---
+
+      monaco.languages.registerHoverProvider('atlas', {
+        provideHover: async function (model, position) {
+          if (!initialized) return null;
+          try {
+            const result = await sendRequest('textDocument/hover', {
+              textDocument: { uri: DOC_URI },
+              position: { line: position.lineNumber - 1, character: position.column - 1 }
+            });
+            if (!result || !result.contents) return null;
+            var value = typeof result.contents === 'string'
+              ? result.contents
+              : result.contents.value || '';
+            return { contents: [{ value: value }] };
+          } catch (e) {
+            return null;
+          }
+        }
+      });
+
       // --- Code Actions (via Monaco lightbulb / Cmd+.) ---
 
       monaco.languages.registerCodeActionProvider('atlas', {
