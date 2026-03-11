@@ -31,7 +31,7 @@ Currently supported capabilities:
 - **Semantic tokens** — syntax highlighting for words, strings, numbers, parentheses, and comments
 - **Hover** — word summary, stack signature, and examples on hover
 - **Diagnostics** — error and warning reporting for invalid expressions
-- **Code actions** — expression formatting via refactor/rewrite
+- **Code actions** — expression formatting and compression via refactor/rewrite
 
 ## TODO
 
@@ -49,8 +49,6 @@ Currently supported capabilities:
 
 ### Editor Features
 - [x] Hover documentation — show word summary and stack signature on hover
-- [ ] Inlay hints — display intermediate stack state between tokens
-- [ ] Signature help — show expected stack types when typing a word
 - [ ] Go to definition — jump to variable definitions for `:set`/`:get`
 - [ ] Expression preview — show evaluated result or final stack
 
