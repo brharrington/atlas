@@ -28,6 +28,8 @@ import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
 import org.eclipse.lsp4j.SemanticTokensWithRegistrationOptions;
 import org.eclipse.lsp4j.ServerCapabilities;
+import org.eclipse.lsp4j.TextDocumentSyncKind;
+import org.eclipse.lsp4j.TextDocumentSyncOptions;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.LanguageClientAware;
 import org.eclipse.lsp4j.services.LanguageServer;
@@ -70,6 +72,10 @@ public class AtlasLspServer implements LanguageServer, LanguageClientAware {
     @Override
     public CompletableFuture<InitializeResult> initialize(InitializeParams params) {
         var capabilities = new ServerCapabilities();
+        var syncOptions = new TextDocumentSyncOptions();
+        syncOptions.setOpenClose(true);
+        syncOptions.setChange(TextDocumentSyncKind.Incremental);
+        capabilities.setTextDocumentSync(syncOptions);
         var completionOptions = new CompletionOptions();
         completionOptions.setTriggerCharacters(List.of(",", ":"));
         capabilities.setCompletionProvider(completionOptions);

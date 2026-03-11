@@ -63,12 +63,22 @@ public class AtlasTextDocumentService implements TextDocumentService {
 
     @Override
     public void didChange(DidChangeTextDocumentParams params) {
-        var changes = params.getContentChanges();
-        if (!changes.isEmpty()) {
-            var text = changes.get(changes.size() - 1).getText();
-            var uri = params.getTextDocument().getUri();
-            analyzer.updateDocument(uri, text);
+        var uri = params.getTextDocument().getUri();
+        var text = analyzer.getText(uri);
+        for (var change : params.getContentChanges()) {
+            if (change.getRange() == null) {
+                // Full sync: no range means entire document replacement
+                text = change.getText();
+            } else {
+                // Incremental sync: apply range-based edit
+                var start = positionToOffset(text, change.getRange().getStart().getLine(),
+                        change.getRange().getStart().getCharacter());
+                var end = positionToOffset(text, change.getRange().getEnd().getLine(),
+                        change.getRange().getEnd().getCharacter());
+                text = text.substring(0, start) + change.getText() + text.substring(end);
+            }
         }
+        analyzer.updateDocument(uri, text);
     }
 
     @Override

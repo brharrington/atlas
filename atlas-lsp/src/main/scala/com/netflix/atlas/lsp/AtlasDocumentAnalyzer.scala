@@ -321,14 +321,39 @@ class AtlasDocumentAnalyzer(
 
   private[lsp] def computeHover(text: String, offset: Int): Option[Hover] = {
     val tree = interpreter.syntaxTree(text)
+    val flat = flattenNodes(tree.nodes)
     findNodeAt(tree.nodes, offset).flatMap {
-      case WordNode(_, Some(word), _, _) =>
-        Some(wordHover(word, text, offset))
+      case wn @ WordNode(_, Some(word), stack, _) =>
+        val postStack = computePostStack(flat, tree.stack, wn)
+        Some(wordHover(word, stack, postStack, text, offset))
       case _ => None
     }
   }
 
-  private def wordHover(word: Word, text: String, offset: Int): Hover = {
+  /** Compute the post-execution stack for a word node by finding the next node's stack. */
+  private def computePostStack(
+    flat: List[SyntaxNode],
+    treeStack: List[Any],
+    node: WordNode
+  ): List[Any] = {
+    val idx = flat.indexOf(node)
+    if (idx < 0) return treeStack
+    // Find the next WordNode and use its pre-execution stack
+    flat
+      .drop(idx + 1)
+      .collectFirst {
+        case WordNode(_, _, stack, _) => stack
+      }
+      .getOrElse(treeStack)
+  }
+
+  private def wordHover(
+    word: Word,
+    preStack: List[Any],
+    postStack: List[Any],
+    text: String,
+    offset: Int
+  ): Hover = {
     val sb = new StringBuilder
     sb.append(s"**:${word.name}**\n\n")
     sb.append(s"`${word.signature}`\n\n")
@@ -339,9 +364,55 @@ class AtlasDocumentAnalyzer(
         sb.append(s"\n- `$ex`")
       }
     }
+    appendStackSection(sb, word, preStack, postStack)
     val content = new MarkupContent(MarkupKind.MARKDOWN, sb.toString)
     val range = new Range(offsetToPosition(text, offset), offsetToPosition(text, offset))
     new Hover(content, range)
+  }
+
+  /** Append a Stack section showing the before → after transformation. */
+  private def appendStackSection(
+    sb: StringBuilder,
+    word: Word,
+    preStack: List[Any],
+    postStack: List[Any]
+  ): Unit = {
+    val consumed = word match {
+      case tw: TypedWord => preStack.take(tw.parameters.length)
+      case _             => Nil
+    }
+    val produced = word match {
+      case _: TypedWord =>
+        // Items produced are those in postStack that weren't in the unconsumed portion
+        val unconsumed = preStack.drop(consumed.length)
+        val newCount = postStack.length - unconsumed.length
+        if (newCount > 0) postStack.take(newCount) else Nil
+      case _ => Nil
+    }
+    if (consumed.isEmpty && produced.isEmpty) return
+    sb.append("\n\n**Stack:**\n```\n")
+    val consumedStr = consumed.reverseIterator.map(formatStackItem).mkString(", ")
+    val producedStr = produced.reverseIterator.map(formatStackItem).mkString(", ")
+    if (consumedStr.nonEmpty && producedStr.nonEmpty)
+      sb.append(s"$consumedStr \u2192 $producedStr")
+    else if (consumedStr.nonEmpty)
+      sb.append(s"$consumedStr \u2192 (empty)")
+    else
+      sb.append(s"(empty) \u2192 $producedStr")
+    sb.append("\n```")
+  }
+
+  /** Format a stack item concisely for hover display. */
+  private def formatStackItem(item: Any): String = {
+    item match {
+      case s: String if s.length > 40 => s"\"${s.take(37)}...\""
+      case s: String                  => s"\"$s\""
+      case n: Number                  => n.toString
+      case items: List[?]             => items.map(formatStackItem).mkString("(", ", ", ")")
+      case other =>
+        val s = other.toString
+        if (s.length > 60) s.take(57) + "..." else s
+    }
   }
 
   /** Find the deepest syntax node whose span contains the given offset. */
@@ -548,17 +619,28 @@ class AtlasDocumentAnalyzer(
   /**
     * Compute semantic token data for the given expression. Returns the LSP-encoded
     * integer array: [deltaLine, deltaStart, length, tokenType, tokenModifiers] per token.
-    * All expressions are single-line, so deltaLine is always 0.
     */
   private[lsp] def computeSemanticTokens(text: String): List[Integer] = {
     val tree = interpreter.syntaxTree(text)
     val builder = List.newBuilder[Integer]
-    var prevStart = 0
+    // Build line start offset table for offset-to-line/col conversion
+    val lineStarts = buildLineStarts(text)
+    var prevLine = 0
+    var prevCol = 0
 
     def encodeValueToken(token: ValueToken, tokenType: Int): Unit = {
       token.spans.foreach { s =>
-        appendToken(builder, s, tokenType, prevStart)
-        prevStart = s.start
+        val (line, col) = offsetToLineCol(lineStarts, s.start)
+        val deltaLine = line - prevLine
+        val deltaStart = if (deltaLine == 0) col - prevCol else col
+        val length = s.end - s.start
+        builder += Integer.valueOf(deltaLine)
+        builder += Integer.valueOf(deltaStart)
+        builder += Integer.valueOf(length)
+        builder += Integer.valueOf(tokenType)
+        builder += Integer.valueOf(0) // no modifiers
+        prevLine = line
+        prevCol = col
       }
     }
 
@@ -578,8 +660,10 @@ class AtlasDocumentAnalyzer(
           children.foreach(encodeNode)
           close.foreach(c => encodeValueToken(c, AtlasTokenTypes.Parenthesis))
         case CommentNode(token) =>
-          appendToken(builder, token.span, AtlasTokenTypes.Comment, prevStart)
-          prevStart = token.span.start
+          encodeValueToken(
+            ValueToken(token.text, List(token.span)),
+            AtlasTokenTypes.Comment
+          )
       }
     }
 
@@ -594,20 +678,27 @@ class AtlasDocumentAnalyzer(
       AtlasTokenTypes.String
   }
 
-  private def appendToken(
-    builder: collection.mutable.Builder[Integer, List[Integer]],
-    span: Span,
-    tokenType: Int,
-    prevStart: Int
-  ): Unit = {
-    val deltaLine = 0 // single-line expressions
-    val deltaStart = span.start - prevStart
-    val length = span.end - span.start
-    builder += Integer.valueOf(deltaLine)
-    builder += Integer.valueOf(deltaStart)
-    builder += Integer.valueOf(length)
-    builder += Integer.valueOf(tokenType)
-    builder += Integer.valueOf(0) // no modifiers
+  /** Build an array of line start offsets for the given text. */
+  private def buildLineStarts(text: String): Array[Int] = {
+    val starts = Array.newBuilder[Int]
+    starts += 0
+    var i = 0
+    while (i < text.length) {
+      if (text.charAt(i) == '\n') starts += (i + 1)
+      i += 1
+    }
+    starts.result()
+  }
+
+  /** Convert an absolute offset to (line, col) using pre-computed line starts. */
+  private def offsetToLineCol(lineStarts: Array[Int], offset: Int): (Int, Int) = {
+    var lo = 0
+    var hi = lineStarts.length - 1
+    while (lo < hi) {
+      val mid = (lo + hi + 1) / 2
+      if (lineStarts(mid) <= offset) lo = mid else hi = mid - 1
+    }
+    (lo, offset - lineStarts(lo))
   }
 
   /** Convert an absolute character offset to an LSP Position (line, character). */

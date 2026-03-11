@@ -239,6 +239,49 @@ class AtlasLspServerSuite extends FunSuite {
   }
 
   //
+  // semantic tokens: multi-line
+  //
+
+  /** Decode raw LSP integer array into (line, col, length, tokenType) tuples. */
+  private def decodeTokensMultiLine(data: List[Int]): List[(Int, Int, Int, Int)] = {
+    var line = 0
+    var col = 0
+    data
+      .grouped(5)
+      .map { group =>
+        line += group(0)
+        col = if (group(0) > 0) group(1) else col + group(1)
+        (line, col, group(2), group(3))
+      }
+      .toList
+  }
+
+  test("semantic tokens: multi-line expression") {
+    val server = newServer
+    val uri = "expr:st-ml1"
+    // "a,\nb" — two lines with comma delimiter
+    openDocument(server, uri, "a,\nb")
+    val tokens = decodeTokensMultiLine(requestSemanticTokens(server, uri))
+    assertEquals(tokens.size, 2)
+    // "a" on line 0, col 0
+    assertEquals(tokens(0), (0, 0, 1, AtlasTokenTypes.String))
+    // "b" on line 1, col 0
+    assertEquals(tokens(1), (1, 0, 1, AtlasTokenTypes.String))
+  }
+
+  test("semantic tokens: multi-line with word on second line") {
+    val server = newServer
+    val uri = "expr:st-ml2"
+    // "a,b,\n:swap" — word on second line
+    openDocument(server, uri, "a,b,\n:swap")
+    val tokens = decodeTokensMultiLine(requestSemanticTokens(server, uri))
+    val wordTokens = tokens.filter(_._4 == AtlasTokenTypes.Word)
+    assertEquals(wordTokens.size, 1)
+    // :swap on line 1, col 0
+    assertEquals(wordTokens.head, (1, 0, 5, AtlasTokenTypes.Word))
+  }
+
+  //
   // code actions
   //
 
@@ -332,6 +375,52 @@ class AtlasLspServerSuite extends FunSuite {
   test("hover: unknown word returns None") {
     val hover = requestHover(":unknown", 0)
     assert(hover.isEmpty)
+  }
+
+  private def requestModelHover(text: String, offset: Int): Option[org.eclipse.lsp4j.Hover] = {
+    val server = new AtlasLspServer(StyleVocabulary)
+    server.analyzer().computeHover(text, offset)
+  }
+
+  test("hover: :eq shows consumed args and result") {
+    // name,sps,:eq
+    // 0123456789012
+    val hover = requestModelHover("name,sps,:eq", 9)
+    assert(hover.isDefined)
+    val content = hover.get.getContents.getRight.getValue
+    assert(content.contains("Stack:"), s"Expected Stack section in: $content")
+    assert(content.contains("\u2192"), s"Expected arrow in: $content")
+    // Should show the consumed "name" and "sps" strings
+    assert(content.contains("\"name\""), s"Expected consumed key in: $content")
+    assert(content.contains("\"sps\""), s"Expected consumed value in: $content")
+  }
+
+  test("hover: :sum shows consumed Query and result") {
+    // name,sps,:eq,:sum
+    // 01234567890123456
+    val hover = requestModelHover("name,sps,:eq,:sum", 13)
+    assert(hover.isDefined)
+    val content = hover.get.getContents.getRight.getValue
+    assert(content.contains("Stack:"), s"Expected Stack section in: $content")
+    assert(content.contains("\u2192"), s"Expected arrow in: $content")
+  }
+
+  test("hover: :swap shows stack items") {
+    val hover = requestHover("a,b,:swap", 4)
+    assert(hover.isDefined)
+    val content = hover.get.getContents.getRight.getValue
+    assert(content.contains("Stack:"), s"Expected Stack section in: $content")
+    assert(content.contains("\"a\""), s"Expected stack item a in: $content")
+    assert(content.contains("\"b\""), s"Expected stack item b in: $content")
+  }
+
+  test("hover: word with empty pre-stack shows produced items") {
+    // :depth takes no parameters but produces an Int
+    val hover = requestHover(":depth", 0)
+    assert(hover.isDefined)
+    val content = hover.get.getContents.getRight.getValue
+    assert(content.contains("Stack:"), s"Expected Stack section in: $content")
+    assert(content.contains("(empty) \u2192"), s"Expected empty input in: $content")
   }
 
   //
