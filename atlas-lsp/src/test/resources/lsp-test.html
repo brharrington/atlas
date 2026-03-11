@@ -230,6 +230,10 @@
 
       // --- Register Atlas language ---
       monaco.languages.register({ id: 'atlas' });
+      // Include backslash in word pattern so \uXXXX is treated as a word token
+      monaco.languages.setLanguageConfiguration('atlas', {
+        wordPattern: /[^\s,()]+/
+      });
 
       monaco.editor.defineTheme('atlas-dark', {
         base: 'vs-dark',
@@ -252,6 +256,8 @@
         fontSize: 14,
         padding: { top: 8, bottom: 8 },
         wordWrap: 'on',
+        quickSuggestions: true,
+        suggestOnTriggerCharacters: true,
       });
 
       // --- Send document changes via LSP ---
@@ -483,6 +489,82 @@
         }
       });
 
+      // --- Completions (Monaco autocomplete widget) ---
+
+      monaco.languages.registerCompletionItemProvider('atlas', {
+        triggerCharacters: [',', ':'],
+        provideCompletionItems: async function (model, position) {
+          if (!initialized) return { suggestions: [] };
+          try {
+            // Sync document immediately so the server sees current text
+            sendNotification('textDocument/didChange', {
+              textDocument: { uri: DOC_URI, version: ++docVersion },
+              contentChanges: [{ text: model.getValue() }]
+            });
+
+            const result = await sendRequest('textDocument/completion', {
+              textDocument: { uri: DOC_URI },
+              position: { line: position.lineNumber - 1, character: position.column - 1 }
+            });
+            const items = result ? (result.items || result) : [];
+            if (!Array.isArray(items)) return { suggestions: [] };
+
+            // Determine if we're in a unicode escape sequence
+            const lineContent = model.getLineContent(position.lineNumber);
+            const before = lineContent.substring(0, position.column - 1);
+            const backslashIdx = before.lastIndexOf('\\');
+            const lastComma = before.lastIndexOf(',');
+            const isUnicode = backslashIdx >= 0 && backslashIdx > lastComma;
+
+            // For unicode: replace from the backslash. For words: replace from after comma.
+            let tokenStart;
+            if (isUnicode) {
+              tokenStart = backslashIdx + 1; // 0-based -> 1-based column
+            } else {
+              tokenStart = position.column;
+              for (let i = position.column - 2; i >= 0; i--) {
+                const ch = lineContent[i];
+                if (ch === ',' || ch === '\n') break;
+                tokenStart = i + 1;
+              }
+            }
+            const typedText = lineContent.substring(tokenStart - 1, position.column - 1);
+            const range = new monaco.Range(
+              position.lineNumber, tokenStart,
+              position.lineNumber, position.column
+            );
+
+            const suggestions = items.map(function (item, idx) {
+              return {
+                label: item.label,
+                kind: isUnicode
+                  ? monaco.languages.CompletionItemKind.Text
+                  : monaco.languages.CompletionItemKind.Function,
+                insertText: item.insertText || item.label,
+                detail: item.detail || '',
+                documentation: item.documentation
+                  ? (typeof item.documentation === 'string'
+                    ? item.documentation
+                    : item.documentation.value || '')
+                  : '',
+                range: range,
+                // For unicode: don't set filterText — let Monaco fuzzy-match against label
+                // (label contains \uXXXX + name, so both hex and name searches work)
+                filterText: isUnicode ? undefined : (item.filterText || item.label),
+                sortText: isUnicode ? String(idx).padStart(4, '0') : (item.sortText || item.label),
+              };
+            });
+
+            // Also update the debug panel
+            renderCompletions(items);
+
+            return { suggestions: suggestions };
+          } catch (e) {
+            return { suggestions: [] };
+          }
+        }
+      });
+
       // --- Code Actions (via Monaco lightbulb / Cmd+.) ---
 
       monaco.languages.registerCodeActionProvider('atlas', {
@@ -538,6 +620,21 @@
       editor.onDidChangeCursorPosition(() => {
         updateCursorToken();
         requestCompletions();
+      });
+
+      // Trigger suggest widget when typing unicode escapes (\, \u, \uXXXX, \uname)
+      editor.onDidChangeModelContent(() => {
+        const pos = editor.getPosition();
+        const model = editor.getModel();
+        const lineContent = model.getLineContent(pos.lineNumber);
+        const before = lineContent.substring(0, pos.column - 1);
+        if (/\\[^\s,()]*$/.test(before)) {
+          // Dismiss any existing widget then re-trigger so provider is called fresh
+          editor.trigger('lsp', 'hideSuggestWidget', {});
+          setTimeout(() => {
+            editor.trigger('lsp', 'editor.action.triggerSuggest', {});
+          }, 10);
+        }
       });
 
       window.addEventListener('resize', () => editor.layout());

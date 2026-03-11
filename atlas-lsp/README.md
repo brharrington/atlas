@@ -45,7 +45,7 @@ Currently supported capabilities:
 ### Completions
 - [ ] Tag value completion
 - [ ] Tag key completion
-- [ ] Unicode character completion
+- [x] Unicode character completion
 - [ ] Improved operator completion
 
 ### Editor Features

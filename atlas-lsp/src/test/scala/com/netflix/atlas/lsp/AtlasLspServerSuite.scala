@@ -516,4 +516,62 @@ class AtlasLspServerSuite extends FunSuite {
     val errors = modelDiagnostics(input).filter(_.contains("no matches"))
     assertEquals(errors, Nil, s"Unexpected errors: ${errors.mkString("; ")}")
   }
+
+  //
+  // unicode completions
+  //
+
+  test("completion: \\ prefix shows curated list") {
+    val server = newServer
+    val uri = "expr:uc0"
+    openDocument(server, uri, "\\")
+    val labels = requestCompletion(server, uri, 1)
+    assert(labels.exists(_.contains("002C")), "should include comma")
+    assert(labels.exists(_.contains("005C")), "should include backslash")
+  }
+
+  test("completion: \\u prefix shows curated list") {
+    val server = newServer
+    val uri = "expr:uc1"
+    openDocument(server, uri, "\\u")
+    val labels = requestCompletion(server, uri, 2)
+    assert(labels.exists(_.contains("002C")), "should include comma")
+    assert(labels.exists(_.contains("003A")), "should include colon")
+    assert(labels.exists(_.contains("0028")), "should include left paren")
+  }
+
+  test("completion: \\u with hex prefix filters") {
+    val server = newServer
+    val uri = "expr:uc2"
+    openDocument(server, uri, "\\u002")
+    val labels = requestCompletion(server, uri, 5)
+    assert(labels.exists(_.contains("002C")), "should include comma")
+    assert(!labels.exists(_.contains("003A")), "003A doesn't start with 002")
+  }
+
+  test("completion: \\u with exact 4-digit hex") {
+    val server = newServer
+    val uri = "expr:uc3"
+    openDocument(server, uri, "\\u0041")
+    val labels = requestCompletion(server, uri, 6)
+    // 0041 is 'A' — LATIN CAPITAL LETTER A
+    assert(labels.exists(_.contains("0041")))
+  }
+
+  test("completion: \\u with name search") {
+    val server = newServer
+    val uri = "expr:uc4"
+    openDocument(server, uri, "\\uarrow")
+    val labels = requestCompletion(server, uri, 7)
+    assert(labels.nonEmpty, "should find arrow characters")
+    assert(labels.forall(_.toLowerCase.contains("arrow")))
+  }
+
+  test("completion: \\u in middle of expression") {
+    val server = newServer
+    val uri = "expr:uc5"
+    openDocument(server, uri, "a,\\u")
+    val labels = requestCompletion(server, uri, 4)
+    assert(labels.exists(_.contains("002C")), "should show curated list after comma")
+  }
 }

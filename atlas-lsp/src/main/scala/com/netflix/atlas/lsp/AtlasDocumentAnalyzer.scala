@@ -402,6 +402,30 @@ class AtlasDocumentAnalyzer(
 
   private[lsp] def computeCompletions(text: String, offset: Int): List[CompletionItem] = {
     val beforeCursor = text.substring(0, math.min(offset, text.length))
+
+    // Check if cursor is in a unicode escape sequence
+    unicodePrefix(beforeCursor) match {
+      case Some(prefix) => computeUnicodeCompletions(prefix)
+      case None         => computeWordCompletions(beforeCursor)
+    }
+  }
+
+  /** Extract the unicode prefix if the cursor is inside a `\uXXXX` or `\` sequence. */
+  private def unicodePrefix(beforeCursor: String): Option[String] = {
+    val lastComma = beforeCursor.lastIndexOf(',')
+    val token = beforeCursor.substring(lastComma + 1)
+    val idx = token.lastIndexOf('\\')
+    if (idx < 0) None
+    else {
+      val after = token.substring(idx + 1)
+      // Match \, \u, or \uXXXX — skip the leading "u" if present
+      if (after.isEmpty) Some("")
+      else if (after.startsWith("u")) Some(after.substring(1))
+      else None
+    }
+  }
+
+  private def computeWordCompletions(beforeCursor: String): List[CompletionItem] = {
     val tree = interpreter.syntaxTree(beforeCursor)
 
     // Determine if the user is in the middle of typing a word or has completed one
@@ -429,6 +453,74 @@ class AtlasDocumentAnalyzer(
         item.setDocumentation(word.summary)
         item
       }
+  }
+
+  /** Curated unicode characters commonly needed in ASL. */
+  private val curatedUnicode: List[(Int, String)] = List(
+    0x0020 -> "Space",
+    0x0009 -> "Tab",
+    0x000A -> "Newline",
+    0x002C -> "Comma",
+    0x003A -> "Colon",
+    0x0028 -> "Left Parenthesis",
+    0x0029 -> "Right Parenthesis",
+    0x005C -> "Backslash"
+  )
+
+  private def computeUnicodeCompletions(prefix: String): List[CompletionItem] = {
+    val lowerPrefix = prefix.toLowerCase
+    val isHex = lowerPrefix.nonEmpty && lowerPrefix.forall("0123456789abcdef".contains(_))
+
+    if (lowerPrefix.isEmpty) {
+      // Just typed \u — show curated set
+      curatedUnicode.map { case (cp, desc) => unicodeCompletionItem(cp, desc) }
+    } else if (isHex) {
+      // Hex prefix — filter curated by code, plus exact match if 4 digits
+      val fromCurated = curatedUnicode.collect {
+        case (cp, desc) if f"$cp%04x".startsWith(lowerPrefix) =>
+          unicodeCompletionItem(cp, desc)
+      }
+      val exact = if (lowerPrefix.length == 4) {
+        val cp = Integer.parseInt(lowerPrefix, 16)
+        if (Character.isDefined(cp) && !curatedUnicode.exists(_._1 == cp)) {
+          val name = Option(Character.getName(cp)).getOrElse("")
+          List(unicodeCompletionItem(cp, name))
+        } else Nil
+      } else Nil
+      fromCurated ++ exact
+    } else {
+      // Non-hex — search by character name across BMP
+      val searchTerms = lowerPrefix.split("\\s+")
+      val results = List.newBuilder[CompletionItem]
+      var count = 0
+      var cp = 0x20
+      while (cp <= 0xFFFF && count < 50) {
+        if (Character.isDefined(cp)) {
+          val name = Character.getName(cp)
+          if (name != null) {
+            val lowerName = name.toLowerCase
+            if (searchTerms.forall(lowerName.contains)) {
+              results += unicodeCompletionItem(cp, name)
+              count += 1
+            }
+          }
+        }
+        cp += 1
+      }
+      results.result()
+    }
+  }
+
+  private def unicodeCompletionItem(codePoint: Int, description: String): CompletionItem = {
+    val hex = f"$codePoint%04X"
+    val ch = new String(Character.toChars(codePoint))
+    val displayCh = if (codePoint < 0x21) "" else s"$ch "
+    val item = new CompletionItem(s"$displayCh\\u$hex $description")
+    item.setKind(CompletionItemKind.Text)
+    item.setInsertText(s"\\u$hex")
+    item.setFilterText(s"\\u$hex $description")
+    item.setDetail(s"U+$hex")
+    item
   }
 
   /**
