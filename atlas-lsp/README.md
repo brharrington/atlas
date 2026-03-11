@@ -51,7 +51,6 @@ Currently supported capabilities:
 ### Editor Features
 - [x] Hover documentation — show word summary and stack signature on hover
 - [x] Go to definition — jump to variable definitions for `:set`/`:get`
-- [ ] Expression preview — show evaluated result or final stack
 
 ### Expression Introspection (for AI tooling)
 - [ ] Stack state inspection — return intermediate stack state at each step of evaluation
