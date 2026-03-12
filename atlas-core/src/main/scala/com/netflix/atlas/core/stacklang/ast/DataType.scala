@@ -31,6 +31,9 @@ trait DataType {
   /** Display name for this type (e.g. "Int", "Double", "TimeSeriesExpr"). */
   def name: String
 
+  /** Optional description providing a hint for diagnostic messages. */
+  def description: String = ""
+
   /**
     * Attempt to extract/coerce a stack value to this type. Returns `Some` with the
     * extracted value if the value is compatible, `None` otherwise.
@@ -51,6 +54,7 @@ object DataType {
   case object IntType extends DataType {
 
     def name: String = "Int"
+    override def description: String = "integer value"
     def extract(value: Any): Option[Any] = unapply(value)
 
     def unapply(value: Any): Option[Int] = value match {
@@ -65,6 +69,7 @@ object DataType {
   case object DoubleType extends DataType {
 
     def name: String = "Double"
+    override def description: String = "numeric value"
     def extract(value: Any): Option[Any] = unapply(value)
 
     def unapply(value: Any): Option[Double] = value match {
@@ -86,6 +91,18 @@ object DataType {
     }
   }
 
+  /** Matches Color values. */
+  case object ColorType extends DataType {
+
+    def name: String = "Color"
+    override def description: String = "hex color, e.g. f00 or ff0000"
+
+    def extract(value: Any): Option[Any] = value match {
+      case s: String => Try(Strings.parseColor(s)).toOption
+      case _         => None
+    }
+  }
+
   /** Matches List values. */
   case object ListType extends DataType {
 
@@ -101,6 +118,7 @@ object DataType {
   case object DurationType extends DataType {
 
     def name: String = "Duration"
+    override def description: String = "duration, e.g. 5m, 1h, PT30S"
     def extract(value: Any): Option[Any] = unapply(value)
 
     def unapply(value: Any): Option[Duration] = value match {
@@ -114,6 +132,7 @@ object DataType {
   case object StringListType extends DataType {
 
     def name: String = "StringList"
+    override def description: String = "list of strings"
     def extract(value: Any): Option[Any] = unapply(value)
 
     def unapply(value: Any): Option[List[String]] = value match {
@@ -126,6 +145,7 @@ object DataType {
   case object DoubleListType extends DataType {
 
     def name: String = "DoubleList"
+    override def description: String = "list of numbers"
     def extract(value: Any): Option[Any] = unapply(value)
 
     def unapply(value: Any): Option[List[Double]] = value match {

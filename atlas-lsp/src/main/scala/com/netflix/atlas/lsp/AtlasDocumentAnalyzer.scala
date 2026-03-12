@@ -79,7 +79,9 @@ class AtlasDocumentAnalyzer(
       return
     }
     val tree = interpreter.syntaxTree(text)
-    val diags = tree.diagnostics.map { d =>
+    val paramDiags = computeParameterDiagnostics(tree)
+    val allDiags = tree.diagnostics ++ paramDiags
+    val diags = allDiags.map { d =>
       val severity = d.severity match {
         case Severity.Error   => DiagnosticSeverity.Error
         case Severity.Warning => DiagnosticSeverity.Warning
@@ -93,6 +95,142 @@ class AtlasDocumentAnalyzer(
     }
     System.err.println(s"DIAG: publishing ${diags.size} diagnostics for: $text")
     client.publishDiagnostics(new PublishDiagnosticsParams(uri, diags.asJava))
+  }
+
+  /**
+    * Compute additional diagnostics that highlight specific stack items whose types
+    * don't match the expected parameter types of a word. This helps users identify
+    * which argument is wrong rather than just seeing "no matches" on the word itself.
+    */
+  private[lsp] def computeParameterDiagnostics(tree: SyntaxTree): List[Diagnostic] = {
+    val flat = flattenNodes(tree.nodes)
+    val diags = List.newBuilder[Diagnostic]
+
+    flat.zipWithIndex.foreach {
+      case (wn @ WordNode(_, _, stack, Some(d)), nodeIdx) if d.message.startsWith("no matches") =>
+        val name = wn.token.value.stripPrefix(":")
+        val candidates = interpreter.vocabulary.filter(_.name == name).collect {
+          case tw: TypedWord => tw
+        }
+        bestCandidate(candidates, stack).foreach { tw =>
+          val sourceMap = buildStackSourceMap(flat, nodeIdx)
+          val params = tw.parameters
+          val n = params.length
+          // Parameters are in user-facing order (deepest first), stack has top first
+          var i = 0
+          while (i < n && i < stack.length) {
+            val param = params(n - 1 - i)
+            val value = stack(i)
+            if (param.dataType.extract(value).isEmpty) {
+              sourceMap.get(i).foreach { span =>
+                val desc = param.dataType.description
+                val expected =
+                  if (desc.nonEmpty) s"${param.dataType.name} ($desc)"
+                  else param.dataType.name
+                val got = formatValueBrief(value)
+                val msg = s"expected $expected, got $got"
+                diags += Diagnostic(span, msg, Severity.Error)
+              }
+            }
+            i += 1
+          }
+        }
+      case _ =>
+    }
+
+    diags.result()
+  }
+
+  /** Find the candidate TypedWord whose parameters best match the given stack. */
+  private def bestCandidate(candidates: List[TypedWord], stack: List[Any]): Option[TypedWord] = {
+    if (candidates.isEmpty) return None
+    candidates
+      .filter(_.parameters.length <= stack.length)
+      .maxByOption { tw =>
+        val params = tw.parameters
+        val n = params.length
+        var count = 0
+        var i = 0
+        while (i < n) {
+          if (params(n - 1 - i).dataType.extract(stack(i)).isDefined) count += 1
+          i += 1
+        }
+        count
+      }
+  }
+
+  /**
+    * Build a mapping from stack position (0 = top) to the source node span that
+    * produced the value at that position, relative to the error word at `errorIdx`.
+    * Walk backwards through the flat node list, replaying stack effects.
+    *
+    * We maintain a virtual stack that tracks which items in the error word's stack
+    * came from which node. `skip` counts items that need to be consumed by
+    * intermediate words and should not be mapped.
+    */
+  private def buildStackSourceMap(
+    flat: List[SyntaxNode],
+    errorIdx: Int
+  ): Map[Int, Span] = {
+    val result = scala.collection.mutable.Map[Int, Span]()
+    // pos = next error-stack position to assign; skip = items to skip (consumed
+    // by intermediate words)
+    var pos = 0
+    var skip = 0
+    var i = errorIdx - 1
+    while (i >= 0) {
+      flat(i) match {
+        case ln: LiteralNode =>
+          if (skip > 0) {
+            skip -= 1
+          } else {
+            result(pos) = ln.span
+            pos += 1
+          }
+        case wn: WordNode =>
+          wn.word match {
+            case Some(tw: TypedWord) =>
+              val pushed = tw.outputs.length
+              if (skip >= pushed) {
+                // All outputs consumed by a later intermediate word
+                skip -= pushed
+                skip += tw.parameters.length
+              } else {
+                // Some or all outputs map to the error word's stack
+                val skipped = skip
+                skip = 0
+                var j = skipped
+                while (j < pushed) {
+                  result(pos) = wn.span
+                  pos += 1
+                  j += 1
+                }
+                skip += tw.parameters.length
+              }
+            case _ =>
+              // Opaque word — can't trace through it, stop
+              return result.toMap
+          }
+        case _ => // comments, etc — skip
+      }
+      i -= 1
+    }
+    result.toMap
+  }
+
+  /** Format a stack value briefly for diagnostic messages. */
+  private def formatValueBrief(value: Any): String = {
+    value match {
+      case s: String => s"""String "$s""""
+      case n: Number => s"${n.getClass.getSimpleName} $n"
+      case items: List[?] =>
+        val inner = items.map(formatValueBrief).mkString(", ")
+        s"List ($inner)"
+      case other =>
+        val typeName = other.getClass.getSimpleName
+        val s = other.toString
+        if (s.length > 40) s"$typeName ${s.take(37)}..." else s"$typeName $s"
+    }
   }
 
   private[lsp] def computeCodeActions(uri: String): List[Either[Command, CodeAction]] = {
@@ -498,52 +636,73 @@ class AtlasDocumentAnalyzer(
 
     // Check if cursor is in a unicode escape sequence
     unicodePrefix(beforeCursor) match {
-      case Some(prefix) => computeUnicodeCompletions(prefix)
-      case None         => computeWordCompletions(beforeCursor)
+      case Some((prefix, backslashOffset)) =>
+        val replaceStart = offsetToPosition(text, backslashOffset)
+        val replaceEnd = offsetToPosition(text, offset)
+        val replaceRange = new Range(replaceStart, replaceEnd)
+        computeUnicodeCompletions(prefix, replaceRange)
+      case None => computeWordCompletions(text, offset)
     }
   }
 
-  /** Extract the unicode prefix if the cursor is inside a `\uXXXX` or `\` sequence. */
-  private def unicodePrefix(beforeCursor: String): Option[String] = {
+  /**
+    * Extract the unicode prefix if the cursor is inside a `\uXXXX` or `\` sequence.
+    * Returns the prefix (after `\u`) and the absolute offset of the backslash.
+    */
+  private def unicodePrefix(beforeCursor: String): Option[(String, Int)] = {
     val lastComma = beforeCursor.lastIndexOf(',')
-    val token = beforeCursor.substring(lastComma + 1)
+    val tokenStart = lastComma + 1
+    val token = beforeCursor.substring(tokenStart)
     val idx = token.lastIndexOf('\\')
     if (idx < 0) None
     else {
       val after = token.substring(idx + 1)
+      val backslashOffset = tokenStart + idx
       // Match \, \u, or \uXXXX — skip the leading "u" if present
-      if (after.isEmpty) Some("")
-      else if (after.startsWith("u")) Some(after.substring(1))
+      if (after.isEmpty) Some(("", backslashOffset))
+      else if (after.startsWith("u")) Some((after.substring(1), backslashOffset))
       else None
     }
   }
 
-  private def computeWordCompletions(beforeCursor: String): List[CompletionItem] = {
+  private def computeWordCompletions(text: String, offset: Int): List[CompletionItem] = {
+    val beforeCursor = text.substring(0, math.min(offset, text.length))
     val tree = interpreter.syntaxTree(beforeCursor)
 
     // Determine if the user is in the middle of typing a word or has completed one
     val lastWordNode = tree.nodes.reverseIterator.collectFirst { case w: WordNode => w }
-    val (stack, currentPrefix) = lastWordNode match {
+    val (stack, currentPrefix, tokenStart) = lastWordNode match {
       case Some(w) if w.word.isDefined =>
         // Completed word that executed successfully — offer next-token completions
-        (tree.stack, "")
+        (tree.stack, "", beforeCursor.length)
       case Some(w) =>
         // Partial or unknown word — prefix-filter using stack before this word
-        (w.stack, w.token.value.stripPrefix(":"))
+        (w.stack, w.token.value.stripPrefix(":"), w.span.start)
       case _ =>
-        (tree.stack, "")
+        (tree.stack, "", beforeCursor.length)
     }
 
+    // Add trailing comma unless the character after the cursor is already a comma
+    val afterCursor = if (offset < text.length) text.charAt(offset) else '\u0000'
+    val suffix = if (afterCursor == ',') "" else ","
+
+    val replaceStart = offsetToPosition(text, tokenStart)
+    val replaceEnd = offsetToPosition(text, offset)
+    val replaceRange = new Range(replaceStart, replaceEnd)
+
     interpreter.vocabulary
-      .collect { case tw: TypedWord => tw }
       .filter(_.name.startsWith(currentPrefix))
-      .filter(_.matches(stack))
+      .filter {
+        case tw: TypedWord => tw.matches(stack)
+        case _             => true
+      }
       .distinctBy(_.name)
       .map { word =>
         val item = new CompletionItem(s":${word.name}")
         item.setKind(CompletionItemKind.Function)
         item.setDetail(word.signature)
         item.setDocumentation(word.summary)
+        item.setTextEdit(Either.forLeft(new TextEdit(replaceRange, s":${word.name}$suffix")))
         item
       }
   }
@@ -560,24 +719,27 @@ class AtlasDocumentAnalyzer(
     0x005C -> "Backslash"
   )
 
-  private def computeUnicodeCompletions(prefix: String): List[CompletionItem] = {
+  private def computeUnicodeCompletions(
+    prefix: String,
+    replaceRange: Range
+  ): List[CompletionItem] = {
     val lowerPrefix = prefix.toLowerCase
     val isHex = lowerPrefix.nonEmpty && lowerPrefix.forall("0123456789abcdef".contains(_))
 
     if (lowerPrefix.isEmpty) {
       // Just typed \u — show curated set
-      curatedUnicode.map { case (cp, desc) => unicodeCompletionItem(cp, desc) }
+      curatedUnicode.map { case (cp, desc) => unicodeCompletionItem(cp, desc, replaceRange) }
     } else if (isHex) {
       // Hex prefix — filter curated by code, plus exact match if 4 digits
       val fromCurated = curatedUnicode.collect {
         case (cp, desc) if f"$cp%04x".startsWith(lowerPrefix) =>
-          unicodeCompletionItem(cp, desc)
+          unicodeCompletionItem(cp, desc, replaceRange)
       }
       val exact = if (lowerPrefix.length == 4) {
         val cp = Integer.parseInt(lowerPrefix, 16)
         if (Character.isDefined(cp) && !curatedUnicode.exists(_._1 == cp)) {
           val name = Option(Character.getName(cp)).getOrElse("")
-          List(unicodeCompletionItem(cp, name))
+          List(unicodeCompletionItem(cp, name, replaceRange))
         } else Nil
       } else Nil
       fromCurated ++ exact
@@ -593,7 +755,7 @@ class AtlasDocumentAnalyzer(
           if (name != null) {
             val lowerName = name.toLowerCase
             if (searchTerms.forall(lowerName.contains)) {
-              results += unicodeCompletionItem(cp, name)
+              results += unicodeCompletionItem(cp, name, replaceRange)
               count += 1
             }
           }
@@ -604,13 +766,17 @@ class AtlasDocumentAnalyzer(
     }
   }
 
-  private def unicodeCompletionItem(codePoint: Int, description: String): CompletionItem = {
+  private def unicodeCompletionItem(
+    codePoint: Int,
+    description: String,
+    replaceRange: Range
+  ): CompletionItem = {
     val hex = f"$codePoint%04X"
     val ch = new String(Character.toChars(codePoint))
     val displayCh = if (codePoint < 0x21) "" else s"$ch "
     val item = new CompletionItem(s"$displayCh\\u$hex $description")
     item.setKind(CompletionItemKind.Text)
-    item.setInsertText(s"\\u$hex")
+    item.setTextEdit(Either.forLeft(new TextEdit(replaceRange, s"\\u$hex")))
     item.setFilterText(s"\\u$hex $description")
     item.setDetail(s"U+$hex")
     item

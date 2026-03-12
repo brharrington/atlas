@@ -642,6 +642,47 @@ class AtlasLspServerSuite extends FunSuite {
   }
 
   //
+  // parameter mismatch diagnostics
+  //
+
+  /** Get parameter mismatch diagnostics for the given expression using the model vocabulary. */
+  private def paramDiagnostics(text: String): List[String] = {
+    val server = new AtlasLspServer(StyleVocabulary)
+    val tree = server.interpreter().syntaxTree(text)
+    server.analyzer().computeParameterDiagnostics(tree).map { d =>
+      s"[${d.span.start}-${d.span.end}] ${d.message}"
+    }
+  }
+
+  test("diagnostics: :color with bad color value highlights the value") {
+    // name,sps,:eq,:sum,foo,:color
+    // 0123456789012345678901234567
+    val diags = paramDiagnostics("name,sps,:eq,:sum,foo,:color")
+    assert(diags.nonEmpty, "expected parameter diagnostics")
+    assert(
+      diags.exists(d => d.contains("expected Color") && d.contains("foo")),
+      s"Expected color mismatch on 'foo': $diags"
+    )
+    // Should point at "foo" which is at offset 18-21
+    assert(
+      diags.exists(_.startsWith("[18-21]")),
+      s"Expected diagnostic on 'foo' span: $diags"
+    )
+  }
+
+  test("diagnostics: valid expression has no parameter diagnostics") {
+    val diags = paramDiagnostics("name,sps,:eq,:sum,f00,:color")
+    assertEquals(diags, Nil)
+  }
+
+  test("diagnostics: multiple bad params each get their own diagnostic") {
+    // :color expects PresentationType and ColorType
+    // With "hello,world,:color", neither matches
+    val diags = paramDiagnostics("hello,world,:color")
+    assert(diags.size >= 2, s"Expected at least 2 diagnostics: $diags")
+  }
+
+  //
   // unicode completions
   //
 
