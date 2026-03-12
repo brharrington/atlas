@@ -849,6 +849,156 @@ class AtlasLspServerSuite extends FunSuite {
   // deprecation diagnostics
   //
 
+  //
+  // glossary wiring
+  //
+
+  test("server with glossary wires through to analyzer") {
+    val glossary = Glossary.load("sample-glossary.json")
+    val server = new AtlasLspServer(StandardVocabulary, glossary)
+    assertEquals(server.analyzer().glossary.id, "nflx.sample")
+    assert(server.analyzer().glossary.metrics.nonEmpty)
+  }
+
+  //
+  // glossary hover
+  //
+
+  private def glossaryServer: AtlasLspServer = {
+    val glossary = Glossary.load("sample-glossary.json")
+    new AtlasLspServer(StandardVocabulary, glossary)
+  }
+
+  private def requestGlossaryHover(
+    text: String,
+    offset: Int
+  ): Option[org.eclipse.lsp4j.Hover] = {
+    val server = glossaryServer
+    server.analyzer().computeHover(text, offset)
+  }
+
+  test("hover: metric name shows glossary description") {
+    // name,sys.cpu.utilization
+    // 0123456789012345678901234
+    val hover = requestGlossaryHover("name,sys.cpu.utilization", 5)
+    assert(hover.isDefined)
+    val content = hover.get.getContents.getRight.getValue
+    assert(content.contains("sys.cpu.utilization"), s"Expected metric name in: $content")
+    assert(content.contains("CPU utilization"), s"Expected description in: $content")
+    assert(content.contains("percent"), s"Expected unit in: $content")
+    assert(content.contains("gauge"), s"Expected type in: $content")
+  }
+
+  test("hover: tag key shows glossary description") {
+    val hover = requestGlossaryHover("nf.app", 0)
+    assert(hover.isDefined)
+    val content = hover.get.getContents.getRight.getValue
+    assert(content.contains("nf.app"), s"Expected tag key in: $content")
+    assert(content.contains("Application name"), s"Expected description in: $content")
+  }
+
+  test("hover: tag value shows glossary description") {
+    // statistic,count — "count" is at value position
+    // 0123456789012345
+    val hover = requestGlossaryHover("statistic,count", 10)
+    assert(hover.isDefined)
+    val content = hover.get.getContents.getRight.getValue
+    assert(content.contains("count"), s"Expected tag value in: $content")
+    assert(content.contains("Rate of events"), s"Expected description in: $content")
+  }
+
+  test("hover: tag key with values shows values") {
+    val hover = requestGlossaryHover("nf.region", 0)
+    assert(hover.isDefined)
+    val content = hover.get.getContents.getRight.getValue
+    assert(content.contains("us-east-1"), s"Expected values in: $content")
+  }
+
+  test("hover: unknown literal returns None") {
+    val hover = requestGlossaryHover("unknownmetric", 0)
+    assert(hover.isEmpty)
+  }
+
+  //
+  // glossary completions
+  //
+
+  private def requestGlossaryCompletion(
+    text: String,
+    character: Int
+  ): List[String] = {
+    val server = glossaryServer
+    val uri = "expr:gc"
+    openDocument(server, uri, text)
+    requestCompletion(server, uri, character)
+  }
+
+  test("completion: tag keys offered at key position") {
+    // Empty expression, typing nothing — should include glossary tag keys
+    val labels = requestGlossaryCompletion("", 0)
+    assert(labels.contains("nf.app"), s"Expected nf.app in: $labels")
+    assert(labels.contains("nf.region"), s"Expected nf.region in: $labels")
+  }
+
+  test("completion: name offered as built-in key with prefix filter") {
+    val labels = requestGlossaryCompletion("nam", 3)
+    assert(labels.contains("name"), s"Expected name in: $labels")
+  }
+
+  test("completion: metric names offered after name,") {
+    // After "name," the next literal is a metric name
+    val labels = requestGlossaryCompletion("name,", 5)
+    assert(labels.exists(_.contains("sys.cpu.utilization")), s"Expected metric in: $labels")
+    assert(labels.exists(_.contains("jvm.gc.pause")), s"Expected jvm metric in: $labels")
+  }
+
+  test("completion: tag values offered at value position") {
+    // "nf.region," — value position for nf.region, should offer enum values
+    val labels = requestGlossaryCompletion("nf.region,", 10)
+    assert(labels.contains("us-east-1"), s"Expected us-east-1 in: $labels")
+    assert(labels.contains("us-west-2"), s"Expected us-west-2 in: $labels")
+  }
+
+  test("completion: glossary completions filtered by prefix") {
+    val labels = requestGlossaryCompletion("name,sys.", 9)
+    assert(labels.exists(_.startsWith("sys.")), s"Expected sys.* metrics in: $labels")
+    assert(!labels.exists(_.startsWith("jvm.")), s"Unexpected jvm.* metrics in: $labels")
+  }
+
+  test("completion: glossary completions use case-insensitive substring") {
+    val labels = requestGlossaryCompletion("name,cpu", 8)
+    assert(
+      labels.contains("sys.cpu.utilization"),
+      s"Expected sys.cpu.utilization in: $labels"
+    )
+    assert(
+      labels.contains("aws.ec2.cpuUtilization"),
+      s"Expected aws.ec2.cpuUtilization in: $labels"
+    )
+  }
+
+  test("completion: glossary completion replaces typed prefix") {
+    val server = glossaryServer
+    val uri = "expr:gc-replace"
+    val text = "name,sys"
+    openDocument(server, uri, text)
+    val params = new CompletionParams
+    params.setTextDocument(new TextDocumentIdentifier(uri))
+    params.setPosition(new Position(0, 8))
+    val items = server.getTextDocumentService.completion(params).get().getLeft.asScala
+    val cpu = items.find(_.getLabel == "sys.cpu.utilization")
+    assert(cpu.isDefined, s"Expected sys.cpu.utilization in: ${items.map(_.getLabel)}")
+    val edit = cpu.get.getTextEdit.getLeft
+    // Should replace from position 5 (after "name,") to 8 (end of "sys")
+    assertEquals(edit.getRange.getStart.getCharacter, 5)
+    assertEquals(edit.getRange.getEnd.getCharacter, 8)
+    assertEquals(edit.getNewText, "sys.cpu.utilization,")
+  }
+
+  //
+  // deprecation diagnostics
+  //
+
   test("diagnostics: deprecated word gets DiagnosticTag.Deprecated") {
     val captured = new java.util.concurrent.atomic.AtomicReference[PublishDiagnosticsParams]()
     val client = new LanguageClient {
@@ -863,7 +1013,7 @@ class AtlasLspServerSuite extends FunSuite {
       override def logMessage(params: org.eclipse.lsp4j.MessageParams): Unit = ()
     }
     val interpreter = Interpreter(StyleVocabulary.allWords)
-    val analyzer = new AtlasDocumentAnalyzer(interpreter, () => client)
+    val analyzer = new AtlasDocumentAnalyzer(interpreter, clientSupplier = () => client)
     analyzer.updateDocument("test:depr", "name,sps,:eq,:sum,(,0h,1d,1w,),:offset")
     val params = captured.get()
     assert(params != null, "expected diagnostics to be published")

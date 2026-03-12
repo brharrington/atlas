@@ -51,8 +51,12 @@ public class AtlasLspServer implements LanguageServer, LanguageClientAware {
     private final AtlasDocumentAnalyzer analyzer;
 
     public AtlasLspServer(Vocabulary vocabulary) {
+        this(vocabulary, Glossary.empty());
+    }
+
+    public AtlasLspServer(Vocabulary vocabulary, Glossary glossary) {
         this.interpreter = Interpreter.apply(vocabulary.allWords());
-        this.analyzer = new AtlasDocumentAnalyzer(interpreter, this::client);
+        this.analyzer = new AtlasDocumentAnalyzer(interpreter, glossary, this::client);
         this.textDocService = new AtlasTextDocumentService(analyzer);
         this.workspaceService = new AtlasWorkspaceService();
     }

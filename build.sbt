@@ -93,7 +93,7 @@ lazy val `atlas-json3` = project
 
 lazy val `atlas-lsp` = project
   .configure(BuildSettings.profile)
-  .dependsOn(`atlas-core`)
+  .dependsOn(`atlas-core`, `atlas-json3`)
   .settings(libraryDependencies ++= Seq(
     Dependencies.lsp4j,
     Dependencies.javaWebSocket % "test"

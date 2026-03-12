@@ -86,7 +86,8 @@ object AtlasLspRunner {
       // LSP4j writes Content-Length framed messages; we strip the framing
       val wsOut = new WebSocketOutputStream(conn)
 
-      val server = new AtlasLspServer(new CustomVocabulary(ConfigFactory.load()))
+      val glossary = Glossary.load("sample-glossary.json")
+      val server = new AtlasLspServer(new CustomVocabulary(ConfigFactory.load()), glossary)
       val launcher = LSPLauncher.createServerLauncher(server, pipedIn, wsOut)
       server.connect(launcher.getRemoteProxy)
 

@@ -10,6 +10,9 @@ self.MonacoEnvironment = {
 monaco.languages.register({ id: 'atlas' });
 monaco.languages.setLanguageConfiguration('atlas', {
   wordPattern: /[^\s,()]+/,
+  comments: {
+    blockComment: ['/*', '*/'],
+  },
 });
 
 // Theme with semantic token colors

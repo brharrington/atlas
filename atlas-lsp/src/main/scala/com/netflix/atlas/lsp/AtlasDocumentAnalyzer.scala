@@ -53,6 +53,7 @@ import org.eclipse.lsp4j.services.LanguageClient
   */
 class AtlasDocumentAnalyzer(
   val interpreter: Interpreter,
+  val glossary: Glossary = Glossary.empty,
   clientSupplier: () => LanguageClient = () => null
 ) {
 
@@ -603,9 +604,154 @@ class AtlasDocumentAnalyzer(
       case wn @ WordNode(_, Some(word), stack, _) =>
         val postStack = computePostStack(flat, tree.stack, wn)
         Some(wordHover(word, stack, postStack, text, offset))
+      case ln: LiteralNode =>
+        literalHover(flat, ln, text)
       case _ => None
     }
   }
+
+  /** Determine the literal context for a node at the given index in the flat node list. */
+  private def literalContext(flat: List[SyntaxNode], nodeIdx: Int): LiteralContext = {
+    // Count consecutive literals ending at nodeIdx
+    var count = 0
+    var i = nodeIdx
+    while (i >= 0) {
+      flat(i) match {
+        case _: LiteralNode => count += 1
+        case _              => i = -1 // break
+      }
+      i -= 1
+    }
+    // Odd count = key position, even count = value position
+    if (count % 2 == 0) {
+      // Value position — find the key (the literal just before this one)
+      val keyIdx = nodeIdx - 1
+      if (keyIdx >= 0) {
+        flat(keyIdx) match {
+          case LiteralNode(token) =>
+            if (token.value == "name") MetricNameContext
+            else TagValueContext(token.value)
+          case _ => TagKeyContext
+        }
+      } else {
+        TagKeyContext
+      }
+    } else {
+      TagKeyContext
+    }
+  }
+
+  /** Find the current metric name from a completed `name,<metric>,:eq` clause earlier. */
+  private def findCurrentMetric(flat: List[SyntaxNode], beforeIdx: Int): Option[String] = {
+    var i = beforeIdx
+    while (i >= 2) {
+      flat(i) match {
+        case WordNode(_, Some(w), _, _) if w.name == "eq" =>
+          // Check if the two preceding nodes are name,<metric>
+          (flat.lift(i - 2), flat.lift(i - 1)) match {
+            case (Some(LiteralNode(keyToken)), Some(LiteralNode(valueToken)))
+                if keyToken.value == "name" =>
+              return Some(valueToken.value)
+            case _ =>
+          }
+        case _ =>
+      }
+      i -= 1
+    }
+    None
+  }
+
+  /** Build hover content for a literal node using glossary data. */
+  private def literalHover(
+    flat: List[SyntaxNode],
+    ln: LiteralNode,
+    text: String
+  ): Option[Hover] = {
+    if (glossary.metrics.isEmpty && glossary.tagKeys.isEmpty && glossary.tagValues.isEmpty)
+      return None
+
+    val nodeIdx = flat.indexOf(ln)
+    if (nodeIdx < 0) return None
+    val value = ln.token.value
+    val ctx = literalContext(flat, nodeIdx)
+    val currentMetric = findCurrentMetric(flat, nodeIdx - 1)
+    val metricDef = currentMetric.flatMap(glossary.metrics.get)
+
+    val content: Option[String] = ctx match {
+      case MetricNameContext =>
+        glossary.metrics.get(value).map { m =>
+          val sb = new StringBuilder
+          sb.append(s"**$value**\n\n")
+          sb.append(m.description)
+          m.unit.foreach(u => sb.append(s"\n\n**Unit:** $u"))
+          m.`type`.foreach(t => sb.append(s"\n\n**Type:** $t"))
+          m.category.foreach(c => sb.append(s"\n\n**Category:** $c"))
+          m.link.foreach(l => sb.append(s"\n\n[Documentation]($l)"))
+          if (m.tags.nonEmpty) {
+            sb.append("\n\n**Tags:**\n")
+            m.tags.foreach {
+              case (k, t) =>
+                val desc = t.description.getOrElse("")
+                sb.append(s"\n- `$k` — $desc")
+            }
+          }
+          sb.toString
+        }
+      case TagKeyContext =>
+        // Try metric-scoped tag first, then global
+        val metricTag = metricDef.flatMap(_.tags.get(value)).map { t =>
+          val sb = new StringBuilder
+          sb.append(s"**$value** (tag key)\n\n")
+          t.description.foreach(sb.append(_))
+          t.values.foreach { vs =>
+            sb.append(s"\n\n**Values:** ${vs.mkString(", ")}")
+          }
+          sb.toString
+        }
+        metricTag.orElse {
+          glossary.tagKeys.get(value).map { t =>
+            val sb = new StringBuilder
+            sb.append(s"**$value** (tag key)\n\n")
+            sb.append(t.description)
+            t.category.foreach(c => sb.append(s"\n\n**Category:** $c"))
+            t.link.foreach(l => sb.append(s"\n\n[Documentation]($l)"))
+            t.values.foreach { vs =>
+              sb.append(s"\n\n**Values:** ${vs.mkString(", ")}")
+            }
+            sb.toString
+          }
+        }
+      case TagValueContext(key) =>
+        // Try metric-scoped tag values, then global tagValues
+        val metricTagValue = metricDef
+          .flatMap(_.tags.get(key))
+          .flatMap { t =>
+            t.values
+              .filter(_.contains(value))
+              .flatMap(_ => t.description.map(d => s"**$value** ($key value)\n\n$d"))
+          }
+        metricTagValue.orElse {
+          glossary.tagValues.get(s"$key=$value").map { tv =>
+            val sb = new StringBuilder
+            sb.append(s"**$value** ($key value)\n\n")
+            sb.append(tv.description)
+            tv.link.foreach(l => sb.append(s"\n\n[Documentation]($l)"))
+            sb.toString
+          }
+        }
+    }
+
+    content.map { md =>
+      val markup = new MarkupContent(MarkupKind.MARKDOWN, md)
+      val range = spanToRange(text, ln.span)
+      new Hover(markup, range)
+    }
+  }
+
+  private sealed trait LiteralContext
+  private case object TagKeyContext extends LiteralContext
+  private case class TagValueContext(key: String) extends LiteralContext
+  private case object MetricNameContext extends LiteralContext
 
   /** Compute the post-execution stack for a word node by finding the next node's stack. */
   private def computePostStack(
@@ -829,7 +975,7 @@ class AtlasDocumentAnalyzer(
     val replaceEnd = offsetToPosition(text, offset)
     val replaceRange = new Range(replaceStart, replaceEnd)
 
-    interpreter.vocabulary
+    val wordCompletions = interpreter.vocabulary
       .filter(_.name.startsWith(currentPrefix))
       .filter {
         case tw: TypedWord => tw.matches(stack)
@@ -844,6 +990,171 @@ class AtlasDocumentAnalyzer(
         item.setTextEdit(Either.forLeft(new TextEdit(replaceRange, s":${word.name}$suffix")))
         item
       }
+
+    val glossaryCompletions = computeGlossaryCompletions(
+      text,
+      beforeCursor,
+      offset,
+      suffix
+    )
+
+    wordCompletions ++ glossaryCompletions
+  }
+
+  private def computeGlossaryCompletions(
+    text: String,
+    beforeCursor: String,
+    offset: Int,
+    suffix: String
+  ): List[CompletionItem] = {
+    if (glossary.metrics.isEmpty && glossary.tagKeys.isEmpty) return Nil
+
+    val tree = interpreter.syntaxTree(beforeCursor)
+    val flat = flattenNodes(tree.nodes)
+
+    // Determine the literal prefix for filtering (text after the last comma)
+    val lastComma = beforeCursor.lastIndexOf(',')
+    val literalPrefix = {
+      if (lastComma >= 0) beforeCursor.substring(lastComma + 1) else beforeCursor
+    }
+
+    // Skip if the user is typing a word (starts with ":")
+    if (literalPrefix.startsWith(":")) return Nil
+    val lowerPrefix = literalPrefix.toLowerCase
+
+    // Compute replace range covering the literal prefix being typed
+    val literalStart = lastComma + 1
+    val replaceRange = new Range(
+      offsetToPosition(text, literalStart),
+      offsetToPosition(text, offset)
+    )
+
+    // Determine literal context. When literalPrefix is empty, the user is at a new
+    // position after a comma (virtual next token). When non-empty, the user is editing
+    // the last literal already in the flat list.
+    val ctx = if (flat.isEmpty) {
+      TagKeyContext
+    } else {
+      val lastIdx = flat.length - 1
+      if (literalPrefix.isEmpty) {
+        // User is typing a new token — use virtual next position
+        var count = 0
+        var i = lastIdx
+        while (i >= 0) {
+          flat(i) match {
+            case _: LiteralNode => count += 1
+            case _              => i = -1
+          }
+          i -= 1
+        }
+        val totalCount = count + 1 // +1 for virtual position
+        if (totalCount % 2 == 0) {
+          // Value position — key is the last literal
+          flat.last match {
+            case LiteralNode(token) =>
+              if (token.value == "name") MetricNameContext
+              else TagValueContext(token.value)
+            case _ => TagKeyContext
+          }
+        } else {
+          TagKeyContext
+        }
+      } else {
+        // User is editing the last literal — use its position directly
+        literalContext(flat, lastIdx)
+      }
+    }
+
+    val currentMetric = findCurrentMetric(flat, flat.length - 1)
+    val metricDef = currentMetric.flatMap(glossary.metrics.get)
+
+    // Set filterText so the LSP client keeps showing substring matches as the user types.
+    // The client normally prefix-matches on filterText, so we prepend the literalPrefix
+    // to the label to ensure items matched by substring are not hidden.
+    def setFilterText(item: CompletionItem): Unit = {
+      val label = item.getLabel
+      if (!label.toLowerCase.startsWith(lowerPrefix))
+        item.setFilterText(s"$literalPrefix $label")
+    }
+
+    ctx match {
+      case MetricNameContext =>
+        glossary.metrics.iterator
+          .filter(_._1.toLowerCase.contains(lowerPrefix))
+          .map {
+            case (name, m) =>
+              val item = new CompletionItem(name)
+              item.setKind(CompletionItemKind.Value)
+              item.setDetail(m.`type`.map(t => s"($t)").getOrElse(""))
+              item.setDocumentation(m.description)
+              item.setTextEdit(Either.forLeft(new TextEdit(replaceRange, s"$name$suffix")))
+              setFilterText(item)
+              item
+          }
+          .toList
+      case TagKeyContext =>
+        val metricTagKeys = metricDef.toList.flatMap(_.tags.iterator).collect {
+          case (k, t) if k.toLowerCase.contains(lowerPrefix) =>
+            val item = new CompletionItem(k)
+            item.setKind(CompletionItemKind.Value)
+            item.setDetail("(metric tag)")
+            item.setDocumentation(t.description.getOrElse(""))
+            item.setTextEdit(Either.forLeft(new TextEdit(replaceRange, s"$k$suffix")))
+            setFilterText(item)
+            item
+        }
+        val globalTagKeys = glossary.tagKeys.iterator
+          .filter(_._1.toLowerCase.contains(lowerPrefix))
+          .map {
+            case (k, t) =>
+              val item = new CompletionItem(k)
+              item.setKind(CompletionItemKind.Value)
+              item.setDetail(t.category.map(c => s"($c)").getOrElse(""))
+              item.setDocumentation(t.description)
+              item.setTextEdit(Either.forLeft(new TextEdit(replaceRange, s"$k$suffix")))
+              setFilterText(item)
+              item
+          }
+          .toList
+        // Add "name" as a built-in key (fundamental ASL concept for metric lookup)
+        val nameItem = if ("name".contains(lowerPrefix)) {
+          val item = new CompletionItem("name")
+          item.setKind(CompletionItemKind.Value)
+          item.setDetail("(metric)")
+          item.setDocumentation("Metric name key. Follow with a metric name and :eq.")
+          item.setTextEdit(Either.forLeft(new TextEdit(replaceRange, s"name$suffix")))
+          setFilterText(item)
+          List(item)
+        } else Nil
+        // Deduplicate: metric-scoped wins, then global, then built-in
+        val metricKeys = metricTagKeys.map(_.getLabel).toSet
+        val allKeys = metricTagKeys ++ globalTagKeys.filterNot(i => metricKeys.contains(i.getLabel))
+        val allLabels = allKeys.map(_.getLabel).toSet
+        allKeys ++ nameItem.filterNot(i => allLabels.contains(i.getLabel))
+      case TagValueContext(key) =>
+        val metricValues = metricDef.toList.flatMap(_.tags.get(key)).flatMap { t =>
+          t.values.getOrElse(Nil).filter(_.toLowerCase.contains(lowerPrefix)).map { v =>
+            val item = new CompletionItem(v)
+            item.setKind(CompletionItemKind.Value)
+            item.setDocumentation(t.description.getOrElse(""))
+            item.setTextEdit(Either.forLeft(new TextEdit(replaceRange, s"$v$suffix")))
+            setFilterText(item)
+            item
+          }
+        }
+        val globalValues = glossary.tagKeys.get(key).toList.flatMap { t =>
+          t.values.getOrElse(Nil).filter(_.toLowerCase.contains(lowerPrefix)).map { v =>
+            val item = new CompletionItem(v)
+            item.setKind(CompletionItemKind.Value)
+            item.setDocumentation(t.description)
+            item.setTextEdit(Either.forLeft(new TextEdit(replaceRange, s"$v$suffix")))
+            setFilterText(item)
+            item
+          }
+        }
+        val metricVals = metricValues.map(_.getLabel).toSet
+        metricValues ++ globalValues.filterNot(i => metricVals.contains(i.getLabel))
+    }
   }
 
   /** Curated unicode characters commonly needed in ASL. */
