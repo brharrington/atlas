@@ -481,8 +481,6 @@ object StatefulVocabulary extends Vocabulary {
 
     override def summary: String =
       """
-        |> :warning: **Deprecated:** Use [:rolling-mean](stateful-rolling‐mean) instead.
-        |
         |Computes a moving average over the input window. Until there is at least one sample
         |for the whole window it will emit `NaN`. If the input line has `NaN` values, then they
         |will be treated as zeros. Example:
@@ -505,6 +503,9 @@ object StatefulVocabulary extends Vocabulary {
         |down. So a 5m window with a 2m step would result in a 4m window with two datapoints
         |per average. A step size larger than the window will result in the trend being a no-op.
       """.stripMargin.trim
+
+    override def deprecated: Option[String] =
+      Some("Use :rolling-mean instead")
 
     override def examples: List[String] = List(":random,PT5M", ":random,20m")
   }

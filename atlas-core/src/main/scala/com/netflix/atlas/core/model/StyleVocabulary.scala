@@ -286,12 +286,12 @@ object StyleVocabulary extends Vocabulary {
 
     override def summary: String =
       """
-        |> :warning: **Deprecated**. Use the [data variant](data-offset) with signature
-        |> `TimeSeriesExpr Duration -- TimeSeriesExpr` instead.
-        |
         |Shift the time frame to use when fetching the data. The expression will be copied for
         |each shift value in the list.
       """.stripMargin.trim
+
+    override def deprecated: Option[String] =
+      Some("Use :offset (data variant) instead")
 
     override def examples: List[String] = List("name,sps,:eq,:sum,(,0h,1d,1w,)")
   }

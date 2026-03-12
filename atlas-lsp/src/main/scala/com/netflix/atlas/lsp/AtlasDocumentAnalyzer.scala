@@ -31,6 +31,7 @@ import org.eclipse.lsp4j.Command
 import org.eclipse.lsp4j.CompletionItem
 import org.eclipse.lsp4j.CompletionItemKind
 import org.eclipse.lsp4j.DiagnosticSeverity
+import org.eclipse.lsp4j.DiagnosticTag
 import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.Hover
 import org.eclipse.lsp4j.Location
@@ -93,7 +94,11 @@ class AtlasDocumentAnalyzer(
         offsetToPosition(text, d.span.start),
         offsetToPosition(text, d.span.end)
       )
-      new org.eclipse.lsp4j.Diagnostic(range, d.message, severity, "atlas")
+      val lspDiag = new org.eclipse.lsp4j.Diagnostic(range, d.message, severity, "atlas")
+      if (d.message.contains("is deprecated:")) {
+        lspDiag.setTags(java.util.List.of(DiagnosticTag.Deprecated))
+      }
+      lspDiag
     }
     System.err.println(s"DIAG: publishing ${diags.size} diagnostics for: $text")
     client.publishDiagnostics(new PublishDiagnosticsParams(uri, diags.asJava))

@@ -233,11 +233,25 @@ case class Interpreter(vocabulary: List[Word]) {
                       currentStack = result.stack
                       stack = currentStack
                       currentVars = result.variables
-                      val diag = matched.filter(!_.isStable).map { w =>
-                        val d = Diagnostic(token.span, s":${w.name} is unstable", Severity.Warning)
-                        diagnostics += d
-                        d
-                      }
+                      val diag = matched
+                        .flatMap { w =>
+                          if (!w.isStable) {
+                            Some(
+                              Diagnostic(token.span, s":${w.name} is unstable", Severity.Warning)
+                            )
+                          } else
+                            w.deprecated.map { msg =>
+                              Diagnostic(
+                                token.span,
+                                s":${w.name} is deprecated: $msg",
+                                Severity.Warning
+                              )
+                            }
+                        }
+                        .map { d =>
+                          diagnostics += d
+                          d
+                        }
                       nodes += WordNode(token, matched, stackBefore, diag)
                     } catch {
                       case e: Exception =>

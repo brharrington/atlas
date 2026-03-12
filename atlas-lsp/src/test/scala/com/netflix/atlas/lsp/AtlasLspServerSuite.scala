@@ -18,20 +18,24 @@ package com.netflix.atlas.lsp
 import scala.jdk.CollectionConverters.*
 
 import com.netflix.atlas.core.model.StyleVocabulary
+import com.netflix.atlas.core.stacklang.Interpreter
 import com.netflix.atlas.core.stacklang.StandardVocabulary
 import org.eclipse.lsp4j.CodeAction
 import org.eclipse.lsp4j.CodeActionContext
 import org.eclipse.lsp4j.CodeActionParams
 import org.eclipse.lsp4j.Command
+import org.eclipse.lsp4j.DiagnosticTag
 import org.eclipse.lsp4j.jsonrpc.messages.{Either => LspEither}
 import org.eclipse.lsp4j.CompletionParams
 import org.eclipse.lsp4j.DidOpenTextDocumentParams
 import org.eclipse.lsp4j.InitializeParams
 import org.eclipse.lsp4j.Position
+import org.eclipse.lsp4j.PublishDiagnosticsParams
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.SemanticTokensParams
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import org.eclipse.lsp4j.TextDocumentItem
+import org.eclipse.lsp4j.services.LanguageClient
 
 import munit.FunSuite
 
@@ -839,5 +843,36 @@ class AtlasLspServerSuite extends FunSuite {
     openDocument(server, uri, "a,\\u")
     val labels = requestCompletion(server, uri, 4)
     assert(labels.exists(_.contains("002C")), "should show curated list after comma")
+  }
+
+  //
+  // deprecation diagnostics
+  //
+
+  test("diagnostics: deprecated word gets DiagnosticTag.Deprecated") {
+    val captured = new java.util.concurrent.atomic.AtomicReference[PublishDiagnosticsParams]()
+    val client = new LanguageClient {
+      override def telemetryEvent(obj: Any): Unit = ()
+      override def publishDiagnostics(params: PublishDiagnosticsParams): Unit = {
+        captured.set(params)
+      }
+      override def showMessage(params: org.eclipse.lsp4j.MessageParams): Unit = ()
+      override def showMessageRequest(
+        params: org.eclipse.lsp4j.ShowMessageRequestParams
+      ): java.util.concurrent.CompletableFuture[org.eclipse.lsp4j.MessageActionItem] = null
+      override def logMessage(params: org.eclipse.lsp4j.MessageParams): Unit = ()
+    }
+    val interpreter = Interpreter(StyleVocabulary.allWords)
+    val analyzer = new AtlasDocumentAnalyzer(interpreter, () => client)
+    analyzer.updateDocument("test:depr", "name,sps,:eq,:sum,(,0h,1d,1w,),:offset")
+    val params = captured.get()
+    assert(params != null, "expected diagnostics to be published")
+    val diags = params.getDiagnostics.asScala.toList
+    val deprecated = diags.filter { d =>
+      d.getTags != null && d.getTags.asScala.contains(DiagnosticTag.Deprecated)
+    }
+    assert(deprecated.nonEmpty, s"expected DiagnosticTag.Deprecated in: $diags")
+    val msg = deprecated.head.getMessage.getLeft
+    assert(msg.contains("deprecated"), s"expected 'deprecated' in message: $msg")
   }
 }

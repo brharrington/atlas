@@ -15,12 +15,14 @@
  */
 package com.netflix.atlas.core.stacklang
 
+import com.netflix.atlas.core.model.StyleVocabulary
 import com.netflix.atlas.core.stacklang.ast.*
 import munit.FunSuite
 
 class SyntaxTreeSuite extends FunSuite {
 
   private val interpreter = Interpreter(StandardVocabulary.allWords)
+  private val styleInterpreter = Interpreter(StyleVocabulary.allWords)
 
   private def valueTokens(str: String): List[ValueToken] = {
     Interpreter.tokenize(str).collect { case vt: ValueToken => vt }
@@ -393,6 +395,14 @@ class SyntaxTreeSuite extends FunSuite {
     val warnings = tree.diagnostics.filter(_.severity == Severity.Warning)
     assertEquals(warnings, Nil)
     assertEquals(tree.stack, List(";unknown"))
+  }
+
+  test("syntaxTree: deprecated word produces warning") {
+    val tree = styleInterpreter.syntaxTree("name,sps,:eq,:sum,(,0h,1d,1w,),:offset")
+    val warnings = tree.diagnostics.filter(_.severity == Severity.Warning)
+    assert(warnings.exists(_.message.contains("deprecated")))
+    // Word still executes and stack is correct
+    assert(tree.stack.nonEmpty)
   }
 
   test("syntaxTree: set and fcall propagates variables") {
