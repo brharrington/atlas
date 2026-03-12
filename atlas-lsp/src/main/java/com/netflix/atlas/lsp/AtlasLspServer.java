@@ -77,7 +77,7 @@ public class AtlasLspServer implements LanguageServer, LanguageClientAware {
         syncOptions.setChange(TextDocumentSyncKind.Incremental);
         capabilities.setTextDocumentSync(syncOptions);
         var completionOptions = new CompletionOptions();
-        completionOptions.setTriggerCharacters(List.of(",", ":"));
+        completionOptions.setTriggerCharacters(List.of(":"));
         capabilities.setCompletionProvider(completionOptions);
         var semanticTokensOptions = new SemanticTokensWithRegistrationOptions();
         semanticTokensOptions.setLegend(AtlasTokenTypes.legend());

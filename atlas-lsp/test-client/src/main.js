@@ -51,6 +51,7 @@ const editor = monaco.editor.create(document.getElementById('editor'), {
   padding: { top: 8, bottom: 8 },
   automaticLayout: true,
   fixedOverflowWidgets: true,
+  wordBasedSuggestions: 'off',
 });
 
 // Connect to Atlas LSP server

@@ -117,7 +117,7 @@ object StyleVocabulary extends Vocabulary {
       val a = Integer.parseInt(alpha, 16)
       val c = Strings.parseColor(color)
       val nc = new Color(c.getRed, c.getGreen, c.getBlue, a)
-      "%08x".format(nc.getRGB)
+      Strings.toString(nc)
     }
 
     override def summary: String =
@@ -139,14 +139,14 @@ object StyleVocabulary extends Vocabulary {
 
     override def parameters: IndexedSeq[Parameter] = ArraySeq(
       Parameter("", "input expression", PresentationType),
-      Parameter("v", "color hex value", DataType.StringType)
+      Parameter("v", "color hex value", DataType.ColorType)
     )
 
     override def outputs: IndexedSeq[DataType] = ArraySeq(PresentationType)
 
     override def execute(context: Context, params: IndexedSeq[Any]): Context = {
       val t = params(0).asInstanceOf[StyleExpr]
-      val v = params(1).asInstanceOf[String]
+      val v = Strings.toString(params(1).asInstanceOf[Color])
       val settings = t.settings + ("color" -> v) - "alpha" - "palette"
       context.copy(stack = t.copy(settings = settings) :: context.stack)
     }
