@@ -686,6 +686,107 @@ class AtlasLspServerSuite extends FunSuite {
   // unicode completions
   //
 
+  //
+  // document symbols
+  //
+
+  private def requestDocumentSymbols(
+    server: AtlasLspServer,
+    text: String
+  ): List[org.eclipse.lsp4j.DocumentSymbol] = {
+    server
+      .analyzer()
+      .computeDocumentSymbols(text)
+      .asInstanceOf[List[org.eclipse.lsp4j.DocumentSymbol]]
+  }
+
+  test("initialize enables document symbols") {
+    val server = newServer
+    val result = server.initialize(new InitializeParams).get()
+    assertNotEquals(result.getCapabilities.getDocumentSymbolProvider, null)
+  }
+
+  test("documentSymbol: swap has two string children") {
+    val server = newServer
+    val symbols = requestDocumentSymbols(server, "a,b,:swap")
+    assertEquals(symbols.size, 1)
+    val swap = symbols.head
+    assertEquals(swap.getName, ":swap")
+    assertEquals(swap.getKind, org.eclipse.lsp4j.SymbolKind.Function)
+    val children = swap.getChildren.asScala.toList
+    assertEquals(children.size, 2)
+    assertEquals(children(0).getName, "a")
+    assertEquals(children(0).getKind, org.eclipse.lsp4j.SymbolKind.String)
+    assertEquals(children(1).getName, "b")
+    assertEquals(children(1).getKind, org.eclipse.lsp4j.SymbolKind.String)
+  }
+
+  test("documentSymbol: eq+sum nested with detail") {
+    val server = new AtlasLspServer(StyleVocabulary)
+    val symbols = requestDocumentSymbols(server, "name,sps,:eq,:sum")
+    assertEquals(symbols.size, 1)
+    val sum = symbols.head
+    assertEquals(sum.getName, ":sum")
+    assertEquals(sum.getKind, org.eclipse.lsp4j.SymbolKind.Function)
+    assert(sum.getDetail.contains("--"), s"Expected signature in detail: ${sum.getDetail}")
+    val sumChildren = sum.getChildren.asScala.toList
+    assertEquals(sumChildren.size, 1)
+    val eq = sumChildren.head
+    assertEquals(eq.getName, ":eq")
+    val eqChildren = eq.getChildren.asScala.toList
+    assertEquals(eqChildren.size, 2)
+    assertEquals(eqChildren(0).getName, "name")
+    assertEquals(eqChildren(1).getName, "sps")
+  }
+
+  test("documentSymbol: list as array with children") {
+    val server = newServer
+    val symbols = requestDocumentSymbols(server, "(,a,b,)")
+    assertEquals(symbols.size, 1)
+    val list = symbols.head
+    assertEquals(list.getName, "(...)")
+    assertEquals(list.getKind, org.eclipse.lsp4j.SymbolKind.Array)
+    val children = list.getChildren.asScala.toList
+    assertEquals(children.size, 2)
+    assertEquals(children(0).getName, "a")
+    assertEquals(children(1).getName, "b")
+  }
+
+  test("documentSymbol: unknown word has unresolved detail") {
+    val server = newServer
+    val symbols = requestDocumentSymbols(server, ":unknown")
+    assertEquals(symbols.size, 1)
+    val sym = symbols.head
+    assertEquals(sym.getName, ":unknown")
+    assertEquals(sym.getKind, org.eclipse.lsp4j.SymbolKind.Function)
+    assertEquals(sym.getDetail, "unresolved")
+  }
+
+  //
+  // unicode completions
+  //
+
+  //
+  // code actions: semicolon typo quick-fix
+  //
+
+  test("codeAction: semicolon typo offers quick-fix") {
+    val server = newServer
+    val uri = "expr:ca-typo1"
+    openDocument(server, uri, "a,b,;swap")
+    val actions = requestCodeActions(server, uri)
+    val titles = codeActionTitles(actions)
+    assert(titles.contains("Replace with ':swap'"), s"Expected typo fix in: $titles")
+  }
+
+  test("codeAction: semicolon typo for unknown word has no action") {
+    val server = newServer
+    val uri = "expr:ca-typo2"
+    openDocument(server, uri, ";notaword")
+    val actions = requestCodeActions(server, uri)
+    assertEquals(actions.size(), 0)
+  }
+
   test("completion: \\ prefix shows curated list") {
     val server = newServer
     val uri = "expr:uc0"

@@ -83,10 +83,11 @@ public class AtlasLspServer implements LanguageServer, LanguageClientAware {
         semanticTokensOptions.setLegend(AtlasTokenTypes.legend());
         semanticTokensOptions.setFull(true);
         capabilities.setSemanticTokensProvider(semanticTokensOptions);
-        var codeActionOptions = new CodeActionOptions(List.of(CodeActionKind.RefactorRewrite));
+        var codeActionOptions = new CodeActionOptions(List.of(CodeActionKind.QuickFix, CodeActionKind.RefactorRewrite));
         capabilities.setCodeActionProvider(codeActionOptions);
         capabilities.setHoverProvider(true);
         capabilities.setDefinitionProvider(true);
+        capabilities.setDocumentSymbolProvider(true);
         return CompletableFuture.completedFuture(new InitializeResult(capabilities));
     }
 

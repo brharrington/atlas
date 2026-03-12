@@ -31,6 +31,7 @@ import org.eclipse.lsp4j.Command
 import org.eclipse.lsp4j.CompletionItem
 import org.eclipse.lsp4j.CompletionItemKind
 import org.eclipse.lsp4j.DiagnosticSeverity
+import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.Hover
 import org.eclipse.lsp4j.Location
 import org.eclipse.lsp4j.MarkupContent
@@ -38,6 +39,7 @@ import org.eclipse.lsp4j.MarkupKind
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.PublishDiagnosticsParams
 import org.eclipse.lsp4j.Range
+import org.eclipse.lsp4j.SymbolKind
 import org.eclipse.lsp4j.TextEdit
 import org.eclipse.lsp4j.WorkspaceEdit
 import org.eclipse.lsp4j.jsonrpc.messages.Either
@@ -233,12 +235,44 @@ class AtlasDocumentAnalyzer(
     }
   }
 
+  private[lsp] def computeTypoCodeActions(uri: String): List[Either[Command, CodeAction]] = {
+    val text = getText(uri)
+    if (text.isEmpty) return Nil
+    val tree = interpreter.syntaxTree(text)
+    val actions = List.newBuilder[Either[Command, CodeAction]]
+    tree.diagnostics.foreach { d =>
+      val msg = d.message
+      if (msg.startsWith("did you mean ':") && msg.endsWith("'? (semicolon instead of colon)")) {
+        val name = msg.stripPrefix("did you mean ':").stripSuffix("'? (semicolon instead of colon)")
+        val range = new Range(
+          offsetToPosition(text, d.span.start),
+          offsetToPosition(text, d.span.end)
+        )
+        val lspDiag = new org.eclipse.lsp4j.Diagnostic(
+          range,
+          d.message,
+          DiagnosticSeverity.Warning,
+          "atlas"
+        )
+        val edit = new TextEdit(range, s":$name")
+        val wsEdit = new WorkspaceEdit(java.util.Map.of(uri, java.util.List.of(edit)))
+        val action = new CodeAction(s"Replace with ':$name'")
+        action.setKind(CodeActionKind.QuickFix)
+        action.setDiagnostics(java.util.List.of(lspDiag))
+        action.setEdit(wsEdit)
+        actions += Either.forRight(action)
+      }
+    }
+    actions.result()
+  }
+
   private[lsp] def computeCodeActions(uri: String): List[Either[Command, CodeAction]] = {
     val text = getText(uri)
     if (text.isEmpty) return Nil
     val tree = interpreter.syntaxTree(text)
+    val typoActions = computeTypoCodeActions(uri)
     val hasErrors = tree.diagnostics.exists(_.severity == Severity.Error)
-    if (hasErrors) return Nil
+    if (hasErrors) return typoActions
     val actions = List.newBuilder[Either[Command, CodeAction]]
     val range = new Range(new Position(0, 0), offsetToPosition(text, text.length))
 
@@ -281,7 +315,107 @@ class AtlasDocumentAnalyzer(
       case _: Exception => // Skip normalize action if execution fails
     }
 
-    actions.result()
+    typoActions ++ actions.result()
+  }
+
+  private[lsp] def computeDocumentSymbols(text: String): List[DocumentSymbol] = {
+    val tree = interpreter.syntaxTree(text)
+    buildDocumentSymbols(text, tree.nodes)
+  }
+
+  private def buildDocumentSymbols(
+    text: String,
+    nodes: List[SyntaxNode]
+  ): List[DocumentSymbol] = {
+    import scala.collection.mutable
+    val stack = mutable.ArrayBuffer[DocumentSymbol]()
+
+    nodes.foreach {
+      case node: LiteralNode =>
+        val value = node.token.value
+        val isNum = value.nonEmpty && (value.charAt(0).isDigit || value.charAt(0) == '-')
+        val kind = if (isNum) SymbolKind.Number else SymbolKind.String
+        val range = spanToRange(text, node.span)
+        val sym = new DocumentSymbol(value, kind, range, range)
+        stack += sym
+
+      case _: CommentNode =>
+      // skip comments
+
+      case node: ListNode =>
+        val children = buildDocumentSymbols(text, node.children)
+        val range = spanToRange(text, node.span)
+        val selRange = spanToRange(text, Span(node.open.span.start, node.open.span.end))
+        val sym = new DocumentSymbol("(...)", SymbolKind.Array, range, selRange)
+        sym.setChildren(children.asJava)
+        stack += sym
+
+      case node: WordNode =>
+        val wordName =
+          s":${node.word.map(_.name).getOrElse(node.token.value.stripPrefix(":"))}"
+        val selRange = spanToRange(text, node.span)
+        node.word match {
+          case Some(tw: TypedWord) =>
+            val popCount = tw.parameters.length
+            val children = popSymbols(stack, popCount)
+            val startPos =
+              if (children.nonEmpty) children.head.getRange.getStart
+              else selRange.getStart
+            val range = new Range(startPos, selRange.getEnd)
+            val sym = new DocumentSymbol(wordName, SymbolKind.Function, range, selRange)
+            sym.setDetail(tw.signature)
+            sym.setChildren(children.asJava)
+            stack += sym
+          case Some(w) =>
+            w.name match {
+              case "list" =>
+                val children = stack.toList
+                stack.clear()
+                val startPos =
+                  if (children.nonEmpty) children.head.getRange.getStart
+                  else selRange.getStart
+                val range = new Range(startPos, selRange.getEnd)
+                val sym = new DocumentSymbol(wordName, SymbolKind.Function, range, selRange)
+                sym.setDetail("(macro)")
+                sym.setChildren(children.asJava)
+                stack += sym
+              case "each" | "map" =>
+                val children = popSymbols(stack, 2)
+                val startPos =
+                  if (children.nonEmpty) children.head.getRange.getStart
+                  else selRange.getStart
+                val range = new Range(startPos, selRange.getEnd)
+                val sym = new DocumentSymbol(wordName, SymbolKind.Function, range, selRange)
+                sym.setDetail("(macro)")
+                sym.setChildren(children.asJava)
+                stack += sym
+              case _ =>
+                val sym = new DocumentSymbol(wordName, SymbolKind.Function, selRange, selRange)
+                sym.setDetail("(macro)")
+                stack += sym
+            }
+          case None =>
+            val sym = new DocumentSymbol(wordName, SymbolKind.Function, selRange, selRange)
+            sym.setDetail("unresolved")
+            stack += sym
+        }
+    }
+    stack.toList
+  }
+
+  /** Pop up to `count` symbols from the stack, returning them in original (bottom-up) order. */
+  private def popSymbols(
+    stack: scala.collection.mutable.ArrayBuffer[DocumentSymbol],
+    count: Int
+  ): List[DocumentSymbol] = {
+    val n = math.min(count, stack.size)
+    val result = stack.takeRight(n).toList
+    stack.dropRightInPlace(n)
+    result
+  }
+
+  private def spanToRange(text: String, span: Span): Range = {
+    new Range(offsetToPosition(text, span.start), offsetToPosition(text, span.end))
   }
 
   // --- Expression compressor ---

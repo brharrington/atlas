@@ -28,12 +28,15 @@ import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
 import org.eclipse.lsp4j.DefinitionParams;
+import org.eclipse.lsp4j.DocumentSymbol;
+import org.eclipse.lsp4j.DocumentSymbolParams;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.LocationLink;
 import org.eclipse.lsp4j.SemanticTokens;
 import org.eclipse.lsp4j.SemanticTokensParams;
+import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.TextDocumentService;
 
@@ -143,6 +146,20 @@ public class AtlasTextDocumentService implements TextDocumentService {
         var data = analyzer.computeSemanticTokens(text);
         var javaData = CollectionConverters.asJava(data);
         return CompletableFuture.completedFuture(new SemanticTokens(new java.util.ArrayList<>(javaData)));
+    }
+
+    @Override
+    public CompletableFuture<java.util.List<Either<SymbolInformation, DocumentSymbol>>> documentSymbol(
+            DocumentSymbolParams params) {
+        var uri = params.getTextDocument().getUri();
+        var text = analyzer.getText(uri);
+        var symbols = analyzer.computeDocumentSymbols(text);
+        var javaSymbols = CollectionConverters.asJava(symbols);
+        var result = new java.util.ArrayList<Either<SymbolInformation, DocumentSymbol>>();
+        for (var sym : javaSymbols) {
+            result.add(Either.forRight(sym));
+        }
+        return CompletableFuture.completedFuture(result);
     }
 
     /** Convert an LSP line/character position to an absolute character offset. */

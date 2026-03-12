@@ -375,6 +375,26 @@ class SyntaxTreeSuite extends FunSuite {
     }
   }
 
+  //
+  // syntaxTree: semicolon typo detection
+  //
+
+  test("syntaxTree: semicolon typo for known word produces warning") {
+    val tree = interpreter.syntaxTree("a,b,;swap")
+    val warnings = tree.diagnostics.filter(_.severity == Severity.Warning)
+    assertEquals(warnings.size, 1)
+    assert(warnings.head.message.contains(":swap"))
+    // Still pushed as literal
+    assertEquals(tree.stack, List(";swap", "b", "a"))
+  }
+
+  test("syntaxTree: semicolon with unknown name produces no warning") {
+    val tree = interpreter.syntaxTree(";unknown")
+    val warnings = tree.diagnostics.filter(_.severity == Severity.Warning)
+    assertEquals(warnings, Nil)
+    assertEquals(tree.stack, List(";unknown"))
+  }
+
   test("syntaxTree: set and fcall propagates variables") {
     val tree = interpreter.syntaxTree("duplicate,(,:dup,),:set,4,duplicate,:fcall")
     assertEquals(tree.diagnostics, Nil)

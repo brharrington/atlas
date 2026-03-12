@@ -267,6 +267,17 @@ case class Interpreter(vocabulary: List[Word]) {
                     }
                 }
               case v =>
+                if (v.startsWith(";")) {
+                  val name = v.substring(1)
+                  if (words.contains(name)) {
+                    val d = Diagnostic(
+                      token.span,
+                      s"did you mean ':$name'? (semicolon instead of colon)",
+                      Severity.Warning
+                    )
+                    diagnostics += d
+                  }
+                }
                 currentStack = Interpreter.unescape(v) :: currentStack
                 stack = currentStack
                 nodes += LiteralNode(token)
