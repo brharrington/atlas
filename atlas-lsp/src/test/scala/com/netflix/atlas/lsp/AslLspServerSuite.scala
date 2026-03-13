@@ -39,18 +39,18 @@ import org.eclipse.lsp4j.services.LanguageClient
 
 import munit.FunSuite
 
-class AtlasLspServerSuite extends FunSuite {
+class AslLspServerSuite extends FunSuite {
 
-  private def newServer: AtlasLspServer = new AtlasLspServer(StandardVocabulary)
+  private def newServer: AslLspServer = new AslLspServer(StandardVocabulary)
 
-  private def openDocument(server: AtlasLspServer, uri: String, text: String): Unit = {
+  private def openDocument(server: AslLspServer, uri: String, text: String): Unit = {
     val params = new DidOpenTextDocumentParams
     params.setTextDocument(new TextDocumentItem(uri, "atlas", 1, text))
     server.getTextDocumentService.didOpen(params)
   }
 
   private def requestCompletion(
-    server: AtlasLspServer,
+    server: AslLspServer,
     uri: String,
     character: Int
   ): List[String] = {
@@ -121,7 +121,7 @@ class AtlasLspServerSuite extends FunSuite {
   //
 
   private def requestSemanticTokens(
-    server: AtlasLspServer,
+    server: AslLspServer,
     uri: String
   ): List[Int] = {
     val params = new SemanticTokensParams
@@ -290,7 +290,7 @@ class AtlasLspServerSuite extends FunSuite {
   //
 
   private def requestCodeActions(
-    server: AtlasLspServer,
+    server: AslLspServer,
     uri: String
   ): java.util.List[?] = {
     val text = server.analyzer().getText(uri)
@@ -331,7 +331,7 @@ class AtlasLspServerSuite extends FunSuite {
   }
 
   test("codeAction: normalize reorders query clauses") {
-    val server = new AtlasLspServer(StyleVocabulary)
+    val server = new AslLspServer(StyleVocabulary)
     val uri = "expr:ca-norm"
     openDocument(server, uri, "nf.cluster,foo,:eq,name,bar,:eq,:and,:sum")
     val actions = requestCodeActions(server, uri)
@@ -340,7 +340,7 @@ class AtlasLspServerSuite extends FunSuite {
   }
 
   test("codeAction: normalize not offered when already normalized") {
-    val server = new AtlasLspServer(StyleVocabulary)
+    val server = new AslLspServer(StyleVocabulary)
     val uri = "expr:ca-norm2"
     openDocument(server, uri, "name,sps,:eq,:sum")
     val actions = requestCodeActions(server, uri)
@@ -382,7 +382,7 @@ class AtlasLspServerSuite extends FunSuite {
   }
 
   private def requestModelHover(text: String, offset: Int): Option[org.eclipse.lsp4j.Hover] = {
-    val server = new AtlasLspServer(StyleVocabulary)
+    val server = new AslLspServer(StyleVocabulary)
     server.analyzer().computeHover(text, offset)
   }
 
@@ -531,7 +531,7 @@ class AtlasLspServerSuite extends FunSuite {
 
   /** Format using the full model vocabulary (query, data, math, style words). */
   private def formatModel(text: String): String = {
-    val server = new AtlasLspServer(StyleVocabulary)
+    val server = new AslLspServer(StyleVocabulary)
     val tree = server.interpreter().syntaxTree(text)
     server.analyzer().formatExpression(text, tree.nodes)
   }
@@ -627,7 +627,7 @@ class AtlasLspServerSuite extends FunSuite {
 
   /** Get diagnostics from the syntax tree for the given expression using the model vocabulary. */
   private def modelDiagnostics(text: String): List[String] = {
-    val server = new AtlasLspServer(StyleVocabulary)
+    val server = new AslLspServer(StyleVocabulary)
     val tree = server.interpreter().syntaxTree(text)
     tree.diagnostics.map(d => s"[${d.span.start}-${d.span.end}] ${d.message}")
   }
@@ -651,7 +651,7 @@ class AtlasLspServerSuite extends FunSuite {
 
   /** Get parameter mismatch diagnostics for the given expression using the model vocabulary. */
   private def paramDiagnostics(text: String): List[String] = {
-    val server = new AtlasLspServer(StyleVocabulary)
+    val server = new AslLspServer(StyleVocabulary)
     val tree = server.interpreter().syntaxTree(text)
     server.analyzer().computeParameterDiagnostics(tree).map { d =>
       s"[${d.span.start}-${d.span.end}] ${d.message}"
@@ -695,7 +695,7 @@ class AtlasLspServerSuite extends FunSuite {
   //
 
   private def requestDocumentSymbols(
-    server: AtlasLspServer,
+    server: AslLspServer,
     text: String
   ): List[org.eclipse.lsp4j.DocumentSymbol] = {
     server
@@ -726,7 +726,7 @@ class AtlasLspServerSuite extends FunSuite {
   }
 
   test("documentSymbol: eq+sum nested with detail") {
-    val server = new AtlasLspServer(StyleVocabulary)
+    val server = new AslLspServer(StyleVocabulary)
     val symbols = requestDocumentSymbols(server, "name,sps,:eq,:sum")
     assertEquals(symbols.size, 1)
     val sum = symbols.head
@@ -855,7 +855,7 @@ class AtlasLspServerSuite extends FunSuite {
 
   test("server with glossary wires through to analyzer") {
     val glossary = Glossary.load("sample-glossary.json")
-    val server = new AtlasLspServer(StandardVocabulary, glossary)
+    val server = new AslLspServer(StandardVocabulary, glossary)
     assertEquals(server.analyzer().glossary.id, "nflx.sample")
     assert(server.analyzer().glossary.metrics.nonEmpty)
   }
@@ -864,9 +864,9 @@ class AtlasLspServerSuite extends FunSuite {
   // glossary hover
   //
 
-  private def glossaryServer: AtlasLspServer = {
+  private def glossaryServer: AslLspServer = {
     val glossary = Glossary.load("sample-glossary.json")
-    new AtlasLspServer(StandardVocabulary, glossary)
+    new AslLspServer(StandardVocabulary, glossary)
   }
 
   private def requestGlossaryHover(

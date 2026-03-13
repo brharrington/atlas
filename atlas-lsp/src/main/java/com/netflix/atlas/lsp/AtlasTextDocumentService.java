@@ -43,18 +43,18 @@ import org.eclipse.lsp4j.services.TextDocumentService;
 import scala.jdk.javaapi.CollectionConverters;
 
 /**
- * Java adapter for {@link TextDocumentService} that delegates to {@link AtlasDocumentAnalyzer}.
+ * Java adapter for {@link TextDocumentService} that delegates to a {@link DocumentAnalyzer}.
  * Written in Java to avoid Scala/JDK annotation interop issues with LSP4j.
  */
 public class AtlasTextDocumentService implements TextDocumentService {
 
-    private final AtlasDocumentAnalyzer analyzer;
+    private final DocumentAnalyzer analyzer;
 
-    public AtlasTextDocumentService(AtlasDocumentAnalyzer analyzer) {
+    public AtlasTextDocumentService(DocumentAnalyzer analyzer) {
         this.analyzer = analyzer;
     }
 
-    AtlasDocumentAnalyzer analyzer() {
+    DocumentAnalyzer analyzer() {
         return analyzer;
     }
 

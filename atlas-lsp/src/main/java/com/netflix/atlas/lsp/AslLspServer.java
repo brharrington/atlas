@@ -37,10 +37,10 @@ import org.eclipse.lsp4j.services.TextDocumentService;
 import org.eclipse.lsp4j.services.WorkspaceService;
 
 /**
- * Atlas LSP server implementation. Written in Java to avoid Scala compiler
+ * ASL (Atlas Stack Language) LSP server. Written in Java to avoid Scala compiler
  * issues with LSP4j annotation propagation on bridge methods.
  */
-public class AtlasLspServer implements LanguageServer, LanguageClientAware {
+public class AslLspServer implements LanguageServer, LanguageClientAware {
 
     private final AtomicReference<LanguageClient> clientRef = new AtomicReference<>();
 
@@ -50,11 +50,11 @@ public class AtlasLspServer implements LanguageServer, LanguageClientAware {
 
     private final AtlasDocumentAnalyzer analyzer;
 
-    public AtlasLspServer(Vocabulary vocabulary) {
+    public AslLspServer(Vocabulary vocabulary) {
         this(vocabulary, Glossary.empty());
     }
 
-    public AtlasLspServer(Vocabulary vocabulary, Glossary glossary) {
+    public AslLspServer(Vocabulary vocabulary, Glossary glossary) {
         this.interpreter = Interpreter.apply(vocabulary.allWords());
         this.analyzer = new AtlasDocumentAnalyzer(interpreter, glossary, this::client);
         this.textDocService = new AtlasTextDocumentService(analyzer);

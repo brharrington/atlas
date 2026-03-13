@@ -26,6 +26,12 @@
     .dot { width: 8px; height: 8px; border-radius: 50%; }
     .dot.connected { background: #4ec96b; }
     .dot.disconnected { background: #f44747; }
+    .mode-toggle { display: flex; gap: 4px; margin-left: auto; }
+    .mode-toggle button {
+      padding: 2px 10px; font-size: 11px; border: 1px solid #555;
+      border-radius: 3px; background: transparent; color: #aaa; cursor: pointer;
+    }
+    .mode-toggle button.active { background: #0e639c; color: #fff; border-color: #0e639c; }
     #editor { flex: 1; }
   </style>
 </head>
@@ -35,6 +41,11 @@
     <div class="status">
       <span class="dot disconnected" id="status-dot"></span>
       <span id="status-text">LSP: connecting...</span>
+    </div>
+    <div class="mode-toggle">
+      <button id="btn-asl" class="active" onclick="switchMode('asl')">ASL</button>
+      <button id="btn-uri" onclick="switchMode('uri')">URI</button>
+      <button id="btn-copy" style="display:none" onclick="copyCompactUri()">Copy URI</button>
     </div>
   </header>
   <div id="editor"></div>

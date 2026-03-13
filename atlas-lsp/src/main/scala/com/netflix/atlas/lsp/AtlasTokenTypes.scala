@@ -42,13 +42,25 @@ object AtlasTokenTypes {
   /** A comment delimited by `/* ... */`. */
   val Comment: Int = 5
 
+  /** A URI parameter name (q, s, e, w, h, etc.). */
+  val Parameter: Int = 6
+
+  /** A URI operator character (?, &, =). */
+  val UriOperator: Int = 7
+
+  /** A URI path (/api/v1/graph). */
+  val Path: Int = 8
+
   private val tokenTypes = java.util.List.of(
     SemanticTokenTypes.Function, // Word
     SemanticTokenTypes.String, // String
     SemanticTokenTypes.Number, // Number
     SemanticTokenTypes.Operator, // Parenthesis
     SemanticTokenTypes.Variable, // UnknownWord (variable as fallback)
-    SemanticTokenTypes.Comment // Comment
+    SemanticTokenTypes.Comment, // Comment
+    SemanticTokenTypes.Parameter, // Parameter
+    SemanticTokenTypes.Operator, // UriOperator
+    SemanticTokenTypes.Namespace // Path
   )
 
   private val tokenModifiers = java.util.List.of[String]()

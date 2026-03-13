@@ -55,7 +55,7 @@ class AtlasDocumentAnalyzer(
   val interpreter: Interpreter,
   val glossary: Glossary = Glossary.empty,
   clientSupplier: () => LanguageClient = () => null
-) {
+) extends DocumentAnalyzer {
 
   private val normalizer = new ExprNormalizer(
     com.typesafe.config.ConfigFactory.load().getConfig("atlas.core.normalize")
@@ -272,7 +272,7 @@ class AtlasDocumentAnalyzer(
     actions.result()
   }
 
-  private[lsp] def computeCodeActions(uri: String): List[Either[Command, CodeAction]] = {
+  def computeCodeActions(uri: String): List[Either[Command, CodeAction]] = {
     val text = getText(uri)
     if (text.isEmpty) return Nil
     val tree = interpreter.syntaxTree(text)
@@ -324,7 +324,7 @@ class AtlasDocumentAnalyzer(
     typoActions ++ actions.result()
   }
 
-  private[lsp] def computeDocumentSymbols(text: String): List[DocumentSymbol] = {
+  def computeDocumentSymbols(text: String): List[DocumentSymbol] = {
     val tree = interpreter.syntaxTree(text)
     buildDocumentSymbols(text, tree.nodes)
   }
@@ -597,7 +597,7 @@ class AtlasDocumentAnalyzer(
       }
   }
 
-  private[lsp] def computeHover(text: String, offset: Int): Option[Hover] = {
+  def computeHover(text: String, offset: Int): Option[Hover] = {
     val tree = interpreter.syntaxTree(text)
     val flat = flattenNodes(tree.nodes)
     findNodeAt(tree.nodes, offset).flatMap {
@@ -850,7 +850,7 @@ class AtlasDocumentAnalyzer(
     }
   }
 
-  private[lsp] def computeDefinition(
+  def computeDefinition(
     uri: String,
     text: String,
     offset: Int
@@ -916,7 +916,7 @@ class AtlasDocumentAnalyzer(
     }.lastOption
   }
 
-  private[lsp] def computeCompletions(text: String, offset: Int): List[CompletionItem] = {
+  def computeCompletions(text: String, offset: Int): List[CompletionItem] = {
     val beforeCursor = text.substring(0, math.min(offset, text.length))
 
     // Check if cursor is in a unicode escape sequence
@@ -1236,7 +1236,7 @@ class AtlasDocumentAnalyzer(
     * Compute semantic token data for the given expression. Returns the LSP-encoded
     * integer array: [deltaLine, deltaStart, length, tokenType, tokenModifiers] per token.
     */
-  private[lsp] def computeSemanticTokens(text: String): List[Integer] = {
+  def computeSemanticTokens(text: String): List[Integer] = {
     val tree = interpreter.syntaxTree(text)
     val builder = List.newBuilder[Integer]
     // Build line start offset table for offset-to-line/col conversion
@@ -1318,7 +1318,7 @@ class AtlasDocumentAnalyzer(
   }
 
   /** Convert an absolute character offset to an LSP Position (line, character). */
-  private def offsetToPosition(text: String, offset: Int): Position = {
+  private[lsp] def offsetToPosition(text: String, offset: Int): Position = {
     var line = 0
     var col = 0
     var i = 0

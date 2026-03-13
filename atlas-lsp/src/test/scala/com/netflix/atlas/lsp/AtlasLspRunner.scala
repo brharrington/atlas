@@ -74,7 +74,8 @@ object AtlasLspRunner {
       new java.util.concurrent.ConcurrentHashMap[WebSocket, PipedOutputStream]
 
     override def onOpen(conn: WebSocket, handshake: ClientHandshake): Unit = {
-      println(s"LSP client connected: ${conn.getRemoteSocketAddress}")
+      val path = handshake.getResourceDescriptor
+      println(s"LSP client connected: ${conn.getRemoteSocketAddress} (path: $path)")
 
       // Pipe: we write Content-Length framed messages into pipedOut,
       // LSP4j reads from pipedIn
@@ -87,7 +88,10 @@ object AtlasLspRunner {
       val wsOut = new WebSocketOutputStream(conn)
 
       val glossary = Glossary.load("sample-glossary.json")
-      val server = new AtlasLspServer(new CustomVocabulary(ConfigFactory.load()), glossary)
+      val vocabulary = new CustomVocabulary(ConfigFactory.load())
+      val server =
+        if (path == "/uri") new UriLspServer(vocabulary, glossary)
+        else new AslLspServer(vocabulary, glossary)
       val launcher = LSPLauncher.createServerLauncher(server, pipedIn, wsOut)
       server.connect(launcher.getRemoteProxy)
 
