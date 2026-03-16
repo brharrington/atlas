@@ -241,6 +241,47 @@ class AtlasDocumentAnalyzer(
     }
   }
 
+  private[lsp] def computeDeprecatedOffsetActions(
+    uri: String
+  ): List[Either[Command, CodeAction]] = {
+    val text = getText(uri)
+    if (text.isEmpty) return Nil
+    val tree = interpreter.syntaxTree(text)
+    val actions = List.newBuilder[Either[Command, CodeAction]]
+    val nodes = tree.nodes
+    nodes.sliding(2).foreach {
+      case List(list: ListNode, word: WordNode)
+          if word.word.exists(_.deprecated.isDefined) &&
+            word.token.value.stripPrefix(":") == "offset" &&
+            list.children.size == 1 =>
+        val value = text.substring(list.children.head.span.start, list.children.head.span.end)
+        val range = new Range(
+          offsetToPosition(text, list.span.start),
+          offsetToPosition(text, list.span.end)
+        )
+        val diagRange = new Range(
+          offsetToPosition(text, word.span.start),
+          offsetToPosition(text, word.span.end)
+        )
+        val lspDiag = new org.eclipse.lsp4j.Diagnostic(
+          diagRange,
+          word.diagnostic.map(_.message).getOrElse(":offset is deprecated"),
+          DiagnosticSeverity.Warning,
+          "atlas"
+        )
+        lspDiag.setTags(java.util.List.of(DiagnosticTag.Deprecated))
+        val edit = new TextEdit(range, value)
+        val wsEdit = new WorkspaceEdit(java.util.Map.of(uri, java.util.List.of(edit)))
+        val action = new CodeAction(s"Replace with data variant: $value,:offset")
+        action.setKind(CodeActionKind.QuickFix)
+        action.setDiagnostics(java.util.List.of(lspDiag))
+        action.setEdit(wsEdit)
+        actions += Either.forRight(action)
+      case _ =>
+    }
+    actions.result()
+  }
+
   private[lsp] def computeTypoCodeActions(uri: String): List[Either[Command, CodeAction]] = {
     val text = getText(uri)
     if (text.isEmpty) return Nil
@@ -277,8 +318,10 @@ class AtlasDocumentAnalyzer(
     if (text.isEmpty) return Nil
     val tree = interpreter.syntaxTree(text)
     val typoActions = computeTypoCodeActions(uri)
+    val deprecatedOffsetActions = computeDeprecatedOffsetActions(uri)
+    val quickFixes = typoActions ++ deprecatedOffsetActions
     val hasErrors = tree.diagnostics.exists(_.severity == Severity.Error)
-    if (hasErrors) return typoActions
+    if (hasErrors) return quickFixes
     val actions = List.newBuilder[Either[Command, CodeAction]]
     val range = new Range(new Position(0, 0), offsetToPosition(text, text.length))
 
@@ -321,7 +364,7 @@ class AtlasDocumentAnalyzer(
       case _: Exception => // Skip normalize action if execution fails
     }
 
-    typoActions ++ actions.result()
+    quickFixes ++ actions.result()
   }
 
   def computeDocumentSymbols(text: String): List[DocumentSymbol] = {

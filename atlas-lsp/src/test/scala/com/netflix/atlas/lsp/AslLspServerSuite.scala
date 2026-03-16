@@ -791,6 +791,24 @@ class AslLspServerSuite extends FunSuite {
     assertEquals(actions.size(), 0)
   }
 
+  test("codeAction: deprecated offset with single value offers quick-fix") {
+    val server = new AslLspServer(StyleVocabulary)
+    val uri = "expr:ca-offset1"
+    openDocument(server, uri, "name,sps,:eq,:sum,(,1w,),:offset")
+    val actions = requestCodeActions(server, uri)
+    val titles = codeActionTitles(actions)
+    assert(titles.exists(_.contains("data variant")), s"Expected offset fix in: $titles")
+  }
+
+  test("codeAction: deprecated offset with multiple values has no quick-fix") {
+    val server = new AslLspServer(StyleVocabulary)
+    val uri = "expr:ca-offset2"
+    openDocument(server, uri, "name,sps,:eq,:sum,(,0h,1d,1w,),:offset")
+    val actions = requestCodeActions(server, uri)
+    val titles = codeActionTitles(actions)
+    assert(!titles.exists(_.contains("data variant")), s"Unexpected offset fix in: $titles")
+  }
+
   test("completion: \\ prefix shows curated list") {
     val server = newServer
     val uri = "expr:uc0"
