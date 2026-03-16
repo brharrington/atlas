@@ -95,7 +95,8 @@ object DataType {
   case object ColorType extends DataType {
 
     def name: String = "Color"
-    override def description: String = "hex color, e.g. f00 or ff0000"
+    override def description: String =
+      "hex color as 3-digit RGB (f00), 6-digit RGB (ff0000), or 8-digit ARGB (ffff0000)"
 
     def extract(value: Any): Option[Any] = value match {
       case s: String => Try(Strings.parseColor(s)).toOption
