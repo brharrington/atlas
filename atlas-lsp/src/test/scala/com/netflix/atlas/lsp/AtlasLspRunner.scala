@@ -57,6 +57,9 @@ object AtlasLspRunner {
     println("  cd atlas-lsp/test-client && npm install && npm run dev")
     println()
     println("Press Ctrl+C to stop")
+
+    // Block so the JVM doesn't exit (WebSocket threads are daemon threads)
+    Thread.currentThread().join()
   }
 
   /**
