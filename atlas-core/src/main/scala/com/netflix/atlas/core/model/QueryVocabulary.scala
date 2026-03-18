@@ -19,7 +19,6 @@ import scala.collection.immutable.ArraySeq
 
 import com.netflix.atlas.core.model.ModelDataTypes.*
 import com.netflix.atlas.core.stacklang.Context
-import com.netflix.atlas.core.stacklang.SimpleWord
 import com.netflix.atlas.core.stacklang.StandardVocabulary
 import com.netflix.atlas.core.stacklang.TypedWord
 import com.netflix.atlas.core.stacklang.Vocabulary
@@ -101,7 +100,7 @@ object QueryVocabulary extends Vocabulary {
     override def name: String = "has"
 
     override def parameters: IndexedSeq[Parameter] = ArraySeq(
-      Parameter("k", "tag key to check for", DataType.StringType)
+      Parameter("k", "tag key", DataType.StringType)
     )
 
     override def outputs: IndexedSeq[DataType] = ArraySeq(QueryType)
@@ -451,7 +450,7 @@ object QueryVocabulary extends Vocabulary {
 
     override def parameters: IndexedSeq[Parameter] = ArraySeq(
       Parameter("k", "tag key", DataType.StringType),
-      Parameter("vs", "list of tag values", DataType.ListType)
+      Parameter("vs", "list of tag values", DataType.StringListType)
     )
 
     override def outputs: IndexedSeq[DataType] = ArraySeq(QueryType)
@@ -593,24 +592,30 @@ object QueryVocabulary extends Vocabulary {
     override def examples: List[String] = List(":false", ":true")
   }
 
-  case object CommonQuery extends SimpleWord {
+  case object CommonQuery extends TypedWord {
 
     override def name: String = "cq"
 
-    protected def matcher: PartialFunction[List[Any], Boolean] = {
-      case (_: Query) :: _ :: _ => true
-    }
+    override def parameters: IndexedSeq[Parameter] = ArraySeq(
+      Parameter("expr", "expression or value to apply the query to", DataType.AnyType),
+      Parameter("q", "common query to AND into all sub-queries", QueryType)
+    )
 
-    protected def executor: PartialFunction[List[Any], List[Any]] = {
-      case (q2: Query) :: (expr: Expr) :: stack =>
-        val newExpr = expr.rewrite {
-          case q1: Query => q1.and(q2)
-        }
-        newExpr :: stack
-      case (_: Query) :: stack =>
-        // Ignore items on the stack that are not expressions. So we pop the query and leave
-        // the rest of the stack unchanged.
-        stack
+    override def outputs: IndexedSeq[DataType] = ArraySeq(DataType.AnyType)
+
+    override def execute(context: Context, params: IndexedSeq[Any]): Context = {
+      val result = (params(0), params(1)) match {
+        case (expr: Expr, q2: Query) =>
+          val newExpr = expr.rewrite {
+            case q1: Query => q1.and(q2)
+          }
+          newExpr :: context.stack
+        case (other, _: Query) =>
+          // Ignore items on the stack that are not expressions. So we pop the query and leave
+          // the rest of the stack unchanged.
+          other :: context.stack
+      }
+      context.copy(stack = result)
     }
 
     override def summary: String =
@@ -618,8 +623,6 @@ object QueryVocabulary extends Vocabulary {
         |Recursively AND a common query to all queries in an expression. If the first parameter
         |is not an expression, then it will be not be modified.
       """.stripMargin.trim
-
-    override def signature: String = "Expr Query -- Expr"
 
     override def examples: List[String] =
       List(
