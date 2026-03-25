@@ -25,7 +25,7 @@ import com.netflix.atlas.core.model.MathExpr.AggrMathExpr
 import com.netflix.atlas.core.model.MathExpr.NamedRewrite
 import com.netflix.atlas.core.stacklang.Context
 import com.netflix.atlas.core.stacklang.SimpleWord
-import com.netflix.atlas.core.stacklang.StandardVocabulary.Macro
+import com.netflix.atlas.core.stacklang.TypedMacro
 import com.netflix.atlas.core.stacklang.TypedWord
 import com.netflix.atlas.core.stacklang.Vocabulary
 import com.netflix.atlas.core.stacklang.Word
@@ -81,7 +81,7 @@ object MathVocabulary extends Vocabulary {
     Max,
     Percentiles,
     SampleCount,
-    Macro(
+    TypedMacro(
       "avg",
       List(
         ":dup",
@@ -93,9 +93,12 @@ object MathVocabulary extends Vocabulary {
         "avg",
         ":named-rewrite"
       ),
+      ArraySeq(Parameter("", "input time series", TimeSeriesExprType)),
+      ArraySeq(TimeSeriesExprType),
+      "Compute the average of the input time series across group members.",
       List("name,sps,:eq,(,nf.cluster,),:by", "name,sps,:eq,1h,:offset")
     ),
-    Macro(
+    TypedMacro(
       "stddev",
       List(
         // Copy of base query
@@ -136,9 +139,12 @@ object MathVocabulary extends Vocabulary {
         "stddev",
         ":named-rewrite"
       ),
+      ArraySeq(Parameter("", "input time series", TimeSeriesExprType)),
+      ArraySeq(TimeSeriesExprType),
+      "Compute the standard deviation of the input time series across group members.",
       List("name,sps,:eq,(,nf.cluster,),:by")
     ),
-    Macro(
+    TypedMacro(
       "pct",
       List(
         ":dup",
@@ -150,9 +156,12 @@ object MathVocabulary extends Vocabulary {
         "pct",
         ":named-rewrite"
       ),
+      ArraySeq(Parameter("", "input time series", TimeSeriesExprType)),
+      ArraySeq(TimeSeriesExprType),
+      "Compute each input as a percentage of the sum.",
       List("name,sps,:eq,(,nf.cluster,),:by")
     ),
-    Macro(
+    TypedMacro(
       "dist-avg",
       List(
         ":dup",
@@ -173,9 +182,12 @@ object MathVocabulary extends Vocabulary {
         "dist-avg",
         ":named-rewrite"
       ),
+      ArraySeq(Parameter("", "distribution query", QueryType)),
+      ArraySeq(TimeSeriesExprType),
+      "Compute the average from a distribution (totalTime or totalAmount / count).",
       List("name,playback.startLatency,:eq")
     ),
-    Macro(
+    TypedMacro(
       "dist-max",
       List(
         ":dup",
@@ -188,9 +200,12 @@ object MathVocabulary extends Vocabulary {
         "dist-max",
         ":named-rewrite"
       ),
+      ArraySeq(Parameter("", "distribution query", QueryType)),
+      ArraySeq(TimeSeriesExprType),
+      "Compute the max from a distribution.",
       List("name,playback.startLatency,:eq")
     ),
-    Macro(
+    TypedMacro(
       "dist-stddev",
       List(
         ":dup",
@@ -237,14 +252,59 @@ object MathVocabulary extends Vocabulary {
         "dist-stddev",
         ":named-rewrite"
       ),
+      ArraySeq(Parameter("", "distribution query", QueryType)),
+      ArraySeq(TimeSeriesExprType),
+      "Compute the standard deviation from a distribution.",
       List("name,playback.startLatency,:eq")
     ),
-    Macro("median", List("(", "50", ")", ":percentiles"), List("name,requestLatency,:eq")),
-    Macro("cos", List(":pi", "2", ":div", ":swap", ":sub", ":sin")),
-    Macro("tan", List(":dup", ":sin", ":swap", ":cos", ":div")),
-    Macro("cot", List(":dup", ":cos", ":swap", ":sin", ":div")),
-    Macro("sec", List("1", ":swap", ":cos", ":div")),
-    Macro("csc", List("1", ":swap", ":sin", ":div"))
+    TypedMacro(
+      "median",
+      List("(", "50", ")", ":percentiles"),
+      ArraySeq(Parameter("", "input time series", TimeSeriesExprType)),
+      ArraySeq(TimeSeriesExprType),
+      "Compute the estimated median (50th percentile) from a distribution.",
+      List("name,requestLatency,:eq")
+    ),
+    TypedMacro(
+      "cos",
+      List(":pi", "2", ":div", ":swap", ":sub", ":sin"),
+      ArraySeq(Parameter("", "input time series", TimeSeriesExprType)),
+      ArraySeq(TimeSeriesExprType),
+      "Compute the cosine of the input.",
+      Nil
+    ),
+    TypedMacro(
+      "tan",
+      List(":dup", ":sin", ":swap", ":cos", ":div"),
+      ArraySeq(Parameter("", "input time series", TimeSeriesExprType)),
+      ArraySeq(TimeSeriesExprType),
+      "Compute the tangent of the input.",
+      Nil
+    ),
+    TypedMacro(
+      "cot",
+      List(":dup", ":cos", ":swap", ":sin", ":div"),
+      ArraySeq(Parameter("", "input time series", TimeSeriesExprType)),
+      ArraySeq(TimeSeriesExprType),
+      "Compute the cotangent of the input.",
+      Nil
+    ),
+    TypedMacro(
+      "sec",
+      List("1", ":swap", ":cos", ":div"),
+      ArraySeq(Parameter("", "input time series", TimeSeriesExprType)),
+      ArraySeq(TimeSeriesExprType),
+      "Compute the secant of the input.",
+      Nil
+    ),
+    TypedMacro(
+      "csc",
+      List("1", ":swap", ":sin", ":div"),
+      ArraySeq(Parameter("", "input time series", TimeSeriesExprType)),
+      ArraySeq(TimeSeriesExprType),
+      "Compute the cosecant of the input.",
+      Nil
+    )
   )
 
   case object As extends TypedWord {

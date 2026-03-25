@@ -20,7 +20,7 @@ import java.time.Duration
 import scala.collection.immutable.ArraySeq
 
 import com.netflix.atlas.core.stacklang.Context
-import com.netflix.atlas.core.stacklang.StandardVocabulary.Macro
+import com.netflix.atlas.core.stacklang.TypedMacro
 import com.netflix.atlas.core.stacklang.TypedWord
 import com.netflix.atlas.core.stacklang.Vocabulary
 import com.netflix.atlas.core.stacklang.Word
@@ -46,9 +46,30 @@ object FilterVocabulary extends Vocabulary {
     StatTotal,
     Filter,
     // Legacy operations equivalent to `max,:stat`
-    Macro("stat-min-mf", List("min", ":stat"), List("42")),
-    Macro("stat-max-mf", List("max", ":stat"), List("42")),
-    Macro("stat-avg-mf", List("avg", ":stat"), List("42")),
+    TypedMacro(
+      "stat-min-mf",
+      List("min", ":stat"),
+      ArraySeq(Parameter("", "input time series", TimeSeriesExprType)),
+      ArraySeq(TimeSeriesExprType),
+      "Compute min summary statistic. Shorthand for `min,:stat`.",
+      List("42")
+    ),
+    TypedMacro(
+      "stat-max-mf",
+      List("max", ":stat"),
+      ArraySeq(Parameter("", "input time series", TimeSeriesExprType)),
+      ArraySeq(TimeSeriesExprType),
+      "Compute max summary statistic. Shorthand for `max,:stat`.",
+      List("42")
+    ),
+    TypedMacro(
+      "stat-avg-mf",
+      List("avg", ":stat"),
+      ArraySeq(Parameter("", "input time series", TimeSeriesExprType)),
+      ArraySeq(TimeSeriesExprType),
+      "Compute avg summary statistic. Shorthand for `avg,:stat`.",
+      List("42")
+    ),
     // Priority operators: https://github.com/Netflix/atlas/issues/1224
     PriorityK("bottomk", FilterExpr.BottomK.apply),
     PriorityK("bottomk-others-min", FilterExpr.BottomKOthersMin.apply),

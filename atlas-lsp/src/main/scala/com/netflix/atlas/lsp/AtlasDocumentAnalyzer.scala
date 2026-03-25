@@ -252,8 +252,8 @@ class AtlasDocumentAnalyzer(
     nodes.sliding(2).foreach {
       case List(list: ListNode, word: WordNode)
           if word.word.exists(_.deprecated.isDefined) &&
-            word.token.value.stripPrefix(":") == "offset" &&
-            list.children.size == 1 =>
+          word.token.value.stripPrefix(":") == "offset" &&
+          list.children.size == 1 =>
         val value = text.substring(list.children.head.span.start, list.children.head.span.end)
         val range = new Range(
           offsetToPosition(text, list.span.start),

@@ -18,6 +18,9 @@ package com.netflix.atlas.core.stacklang
 import com.netflix.atlas.core.stacklang.ast.DataType
 import com.netflix.atlas.core.stacklang.ast.Parameter
 
+import com.netflix.atlas.core.model.ModelDataTypes
+import com.netflix.atlas.core.model.StyleExpr
+
 /**
   * A macro with structured parameter and output type declarations. Extends
   * [[TypedWord]] so the LSP sees proper types, signatures, and stack matching.
@@ -44,11 +47,40 @@ case class TypedMacro(
   examples: List[String] = Nil
 ) extends TypedWord {
 
+  // Override to pass through raw stack values without coercion. The parameter
+  // types are used for matching and signature, but the body must see the
+  // original uncoerced values (e.g. a raw Query, not DataExpr.Sum(query)).
+  override protected def extractParam(param: Parameter, value: Any): Any = value
+
+  // Accept StyleExpr where TimeSeriesExprType is expected, since body words
+  // typically handle StyleExpr via StylePassthrough.
+  override def matches(stack: List[Any]): Boolean = {
+    val params = parameters
+    if (stack.length < params.length) return false
+    val n = params.length
+    var i = 0
+    while (i < n) {
+      val param = params(n - 1 - i)
+      val value = stack(i)
+      if (param.dataType == ModelDataTypes.TimeSeriesExprType) {
+        value match {
+          case _: StyleExpr                                 => // ok
+          case _ if param.dataType.extract(value).isDefined => // ok
+          case _                                            => return false
+        }
+      } else if (param.dataType.extract(value).isEmpty) {
+        return false
+      }
+      i += 1
+    }
+    true
+  }
+
   override def execute(context: Context, params: IndexedSeq[Any]): Context = {
     // Reconstruct the original stack and run the body against it. TypedWord
     // already popped the parameters, so push them back in stack order
     // (reverse of user-facing order).
-    val restored = params.reverseIterator.foldLeft(context.stack) { (s, v) => v :: s }
+    val restored = params.foldLeft(context.stack) { (s, v) => v :: s }
     context.interpreter.executeProgram(body, context.copy(stack = restored), unfreeze = false)
   }
 }

@@ -23,6 +23,7 @@ import com.netflix.atlas.core.stacklang.Context
 import com.netflix.atlas.core.stacklang.Interpreter
 import com.netflix.atlas.core.stacklang.SimpleWord
 import com.netflix.atlas.core.stacklang.StandardVocabulary.Macro
+import com.netflix.atlas.core.stacklang.TypedMacro
 import com.netflix.atlas.core.stacklang.TypedWord
 import com.netflix.atlas.core.stacklang.Vocabulary
 import com.netflix.atlas.core.stacklang.Word
@@ -53,23 +54,71 @@ object StyleVocabulary extends Vocabulary {
     Sort,
     Order,
     Limit,
-    Macro("head", List(":limit"), List("name,sps,:eq,(,nf.cluster,),:by,2")),
+    TypedMacro(
+      "head",
+      List(":limit"),
+      ArraySeq(
+        Parameter("", "input expression", PresentationType),
+        Parameter("n", "max number of lines", DataType.StringType)
+      ),
+      ArraySeq(PresentationType),
+      "Restrict output to the first N lines. Shorthand for `:limit`.",
+      List("name,sps,:eq,(,nf.cluster,),:by,2")
+    ),
     // Operations for manipulating the line style or presentation
     Alpha,
     Color,
     Palette,
     LineStyle,
     LineWidth,
-    Macro("area", List("area", ":ls"), List("name,sps,:eq,:sum")),
-    Macro("line", List("line", ":ls"), List("name,sps,:eq,:sum")),
-    Macro("stack", List("stack", ":ls"), List("name,sps,:eq,(,nf.cluster,),:by")),
-    Macro("heatmap", List("heatmap", ":ls"), List("name,sps,:eq,(,nf.cluster,),:by")),
-    Macro(
+    TypedMacro(
+      "area",
+      List("area", ":ls"),
+      ArraySeq(Parameter("", "input expression", PresentationType)),
+      ArraySeq(PresentationType),
+      "Set the line style to area.",
+      List("name,sps,:eq,:sum")
+    ),
+    TypedMacro(
+      "line",
+      List("line", ":ls"),
+      ArraySeq(Parameter("", "input expression", PresentationType)),
+      ArraySeq(PresentationType),
+      "Set the line style to line.",
+      List("name,sps,:eq,:sum")
+    ),
+    TypedMacro(
+      "stack",
+      List("stack", ":ls"),
+      ArraySeq(Parameter("", "input expression", PresentationType)),
+      ArraySeq(PresentationType),
+      "Set the line style to stack.",
+      List("name,sps,:eq,(,nf.cluster,),:by")
+    ),
+    TypedMacro(
+      "heatmap",
+      List("heatmap", ":ls"),
+      ArraySeq(Parameter("", "input expression", PresentationType)),
+      ArraySeq(PresentationType),
+      "Set the line style to heatmap.",
+      List("name,sps,:eq,(,nf.cluster,),:by")
+    ),
+    TypedMacro(
       "percentiles-heatmap",
       List("(", "percentile", ")", ":cg", "heatmap", ":ls"),
+      ArraySeq(Parameter("", "input expression", PresentationType)),
+      ArraySeq(PresentationType),
+      "Group by percentile and display as a heatmap.",
       List("name,requestLatency,:eq")
     ),
-    Macro("vspan", List("vspan", ":ls"), List("name,sps,:eq,:sum,:dup,200e3,:gt")),
+    TypedMacro(
+      "vspan",
+      List("vspan", ":ls"),
+      ArraySeq(Parameter("", "input expression", PresentationType)),
+      ArraySeq(PresentationType),
+      "Set the line style to vertical span.",
+      List("name,sps,:eq,:sum,:dup,200e3,:gt")
+    ),
     // Legacy macro for visualizing epic expressions
     Macro("des-epic-viz", desEpicViz, List("name,sps,:eq,:sum,10,0.1,0.5,0.2,0.2,4")),
     // Remove presentation settings

@@ -21,6 +21,9 @@ import com.netflix.atlas.core.stacklang.ast.DataType
 import com.netflix.atlas.core.stacklang.ast.Parameter
 import com.netflix.atlas.core.util.StringFormatter
 
+import DataType.AnyType
+import DataType.StringType
+
 object StandardVocabulary extends Vocabulary {
 
   val name: String = "std"
@@ -48,11 +51,39 @@ object StandardVocabulary extends Vocabulary {
     Set,
     Swap,
     ToList,
-    Macro("2over", List(":over", ":over"), List("a,b")),
-    Macro("nip", List(":swap", ":drop"), List("a,b")),
-    Macro("tuck", List(":swap", ":over"), List("a,b")),
+    TypedMacro(
+      "2over",
+      List(":over", ":over"),
+      ArraySeq(Parameter("a", "first item", AnyType), Parameter("b", "second item", AnyType)),
+      ArraySeq(AnyType, AnyType, AnyType, AnyType),
+      "Copy the top two items: `a b -- a b a b`.",
+      List("a,b")
+    ),
+    TypedMacro(
+      "nip",
+      List(":swap", ":drop"),
+      ArraySeq(Parameter("a", "item to remove", AnyType), Parameter("b", "item to keep", AnyType)),
+      ArraySeq(AnyType),
+      "Remove the second item: `a b -- b`.",
+      List("a,b")
+    ),
+    TypedMacro(
+      "tuck",
+      List(":swap", ":over"),
+      ArraySeq(Parameter("a", "first item", AnyType), Parameter("b", "second item", AnyType)),
+      ArraySeq(AnyType, AnyType, AnyType),
+      "Copy the top below the second: `a b -- b a b`.",
+      List("a,b")
+    ),
     Macro("fcall", List(":get", ":call"), List("duplicate,(,:dup,),:set,a,duplicate")),
-    Macro("sset", List(":swap", ":set"), List("a,b"))
+    TypedMacro(
+      "sset",
+      List(":swap", ":set"),
+      ArraySeq(Parameter("v", "value", AnyType), Parameter("k", "variable name", StringType)),
+      ArraySeq.empty,
+      "Set a variable: shorthand for `:swap :set`.",
+      List("a,b")
+    )
   )
 
   import com.netflix.atlas.core.stacklang.ast.DataType.*

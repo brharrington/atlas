@@ -21,6 +21,7 @@ import scala.collection.immutable.ArraySeq
 
 import com.netflix.atlas.core.stacklang.Context
 import com.netflix.atlas.core.stacklang.StandardVocabulary.Macro
+import com.netflix.atlas.core.stacklang.TypedMacro
 import com.netflix.atlas.core.stacklang.TypedWord
 import com.netflix.atlas.core.stacklang.Vocabulary
 import com.netflix.atlas.core.stacklang.Word
@@ -47,21 +48,28 @@ object StatefulVocabulary extends Vocabulary {
     Trend,
     Integral,
     Derivative,
-    desMacro("des-simple", List("10", "0.1", "0.5", ":des")),
-    desMacro("des-fast", List("10", "0.1", "0.02", ":des")),
-    desMacro("des-slower", List("10", "0.05", "0.03", ":des")),
-    desMacro("des-slow", List("10", "0.03", "0.04", ":des")),
-    desMacro("sdes-simple", List("10", "0.1", "0.5", ":sdes")),
-    desMacro("sdes-fast", List("10", "0.1", "0.02", ":sdes")),
-    desMacro("sdes-slower", List("10", "0.05", "0.03", ":sdes")),
-    desMacro("sdes-slow", List("10", "0.03", "0.04", ":sdes")),
+    desTypedMacro("des-simple", List("10", "0.1", "0.5", ":des")),
+    desTypedMacro("des-fast", List("10", "0.1", "0.02", ":des")),
+    desTypedMacro("des-slower", List("10", "0.05", "0.03", ":des")),
+    desTypedMacro("des-slow", List("10", "0.03", "0.04", ":des")),
+    desTypedMacro("sdes-simple", List("10", "0.1", "0.5", ":sdes")),
+    desTypedMacro("sdes-fast", List("10", "0.1", "0.02", ":sdes")),
+    desTypedMacro("sdes-slower", List("10", "0.05", "0.03", ":sdes")),
+    desTypedMacro("sdes-slow", List("10", "0.03", "0.04", ":sdes")),
     Macro("des-epic-signal", desEpicSignal, List("name,sps,:eq,:sum,10,0.1,0.5,0.2,0.2,4"))
   )
 
-  private def desMacro(name: String, body: List[String]): Macro = {
-    val example = List("42")
+  private def desTypedMacro(name: String, body: List[String]): TypedMacro = {
     val fullBody = (":dup" :: body) ::: List(name, ":named-rewrite")
-    Macro(name, fullBody, example)
+    val desType = if (name.startsWith("sdes")) "sliding DES" else "DES"
+    TypedMacro(
+      name,
+      fullBody,
+      ArraySeq(Parameter("", "input time series", TimeSeriesExprType)),
+      ArraySeq(TimeSeriesExprType),
+      s"Apply $desType with preset parameters.",
+      List("42")
+    )
   }
 
   case object Delay extends TypedWord with StylePassthrough {
